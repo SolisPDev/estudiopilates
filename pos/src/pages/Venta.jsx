@@ -60,12 +60,9 @@ export default function Venta({ caja, recargarCaja }) {
   function agregarPago(metodo) {
     const restante = subtotal - pagado
     if (restante <= 0) return
-    let monto = restante
-    if (metodo === 'efectivo') {
-      // montos redondos para efectivo: permitir cantidad manual despues de agregar
-      monto = Math.min(restante, 500)
-    }
-    setPagos((prev) => [...prev, { id: uuid(), metodo, monto, venta_idx: prev.length }])
+    // Se llena el restante completo; el monto puede editarse a mano
+    // (p. ej. si el cliente paga de mas y pide vuelto).
+    setPagos((prev) => [...prev, { id: uuid(), metodo, monto: restante, venta_idx: prev.length }])
   }
 
   function editarMonto(id, monto) {
@@ -91,7 +88,7 @@ export default function Venta({ caja, recargarCaja }) {
       setMensaje({ tipo: 'error', texto: 'Abre una caja antes de cobrar' })
       return
     }
-    if (cart.length === 0 || pagos.length === 0 || Math.abs(pagado - subtotal) > 0.001) {
+    if (cart.length === 0 || pagos.length === 0 || pagado < subtotal - 0.001) {
       setMensaje({ tipo: 'error', texto: 'Completa el carrito y cubre el total con pagos' })
       return
     }
@@ -169,9 +166,9 @@ export default function Venta({ caja, recargarCaja }) {
         numero_caja: caja.numero
       }
       await imprimirTicket(venta, itemsDelCarrito, pagosFinales, config)
+      limpiar()
       setRecibo({ venta, items: itemsDelCarrito, pagos: pagosFinales, vuelto: Math.max(0, pagado - subtotal) })
       setMensaje({ tipo: 'ok', texto: `Venta ${venta.folio} registrada` })
-      limpiar()
     } catch (err) {
       setMensaje({ tipo: 'error', texto: err.message })
     }
@@ -271,6 +268,12 @@ export default function Venta({ caja, recargarCaja }) {
           <span className="text-violet-700">${subtotal.toFixed(2)}</span>
         </div>
 
+        {cart.length > 0 && subtotal - pagado > 0.001 && (
+          <div className="text-sm font-semibold text-amber-600 -mt-1">
+            Faltan ${(subtotal - pagado).toFixed(2)} por pagar
+          </div>
+        )}
+
         {pagos.length > 0 && (
           <div className="border rounded-lg p-2 space-y-1">
             {pagos.map((p) => (
@@ -322,7 +325,7 @@ export default function Venta({ caja, recargarCaja }) {
 
         <button
           onClick={cobrar}
-          disabled={!(cart.length > 0 && pagos.length > 0 && Math.abs(pagado - subtotal) <= 0.001)}
+          disabled={!(cart.length > 0 && pagos.length > 0 && pagado >= subtotal - 0.001)}
           className="bg-violet-700 disabled:bg-slate-300 text-white rounded-xl py-4 text-lg font-bold"
         >
           COBRAR ${subtotal.toFixed(2)}

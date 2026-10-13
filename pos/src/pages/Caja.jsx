@@ -105,10 +105,6 @@ export default function Caja({ caja, recargarCaja }) {
     await cargarResumen(caja.id)
   }
 
-  function resetCierre() {
-    setCierre({ contado: '', sincronizado: null, error: null })
-  }
-
   // ---------- Vista: sin caja abierta ----------
   if (!caja) {
     return (
@@ -223,7 +219,9 @@ export default function Caja({ caja, recargarCaja }) {
         <input
           type="number"
           value={cierre.contado}
-          onChange={(e) => { setCierre({ ...cierre, contado: e.target.value }); resetCierre() }}
+          onChange={(e) =>
+            setCierre((prev) => ({ ...prev, contado: e.target.value, sincronizado: null, error: null }))
+          }
           placeholder="Efectivo contado en caja física"
           className="border rounded-lg px-3 py-3 w-full"
         />

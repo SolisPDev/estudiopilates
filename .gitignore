@@ -1,0 +1,16 @@
+# Dependencias
+node_modules/
+
+# Build de la PWA
+pos/dist/
+pos/dev-dist/
+
+# Seguridad: credenciales y secretos (nunca se commitean)
+cpanel/api/config.php
+.env
+.env.*
+
+# Sistema y editores
+.DS_Store
+Thumbs.db
+*.log
