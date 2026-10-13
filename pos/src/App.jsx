@@ -41,22 +41,22 @@ export default function App() {
   }, [])
 
   if (!listo) {
-    return <div className="h-full grid place-items-center text-slate-500">Cargando...</div>
+    return <div className="h-full grid place-items-center text-pizarra">Cargando...</div>
   }
 
   return (
-    <div className="h-full flex flex-col bg-slate-100">
-      <header className="bg-violet-700 text-white px-4 py-3 flex items-center justify-between">
+    <div className="h-full flex flex-col bg-hueso">
+      <header className="bg-marina text-crema px-4 py-3 flex items-center justify-between">
         <div>
-          <div className="text-lg font-bold leading-tight">Estudio Pilates &amp; Barre</div>
-          <div className="text-xs text-violet-200">
+          <div className="font-serif text-lg font-bold leading-tight">Estudio Pilates &amp; Barre</div>
+          <div className="text-xs text-crema/70">
             {usuario}
             {caja ? ` · Caja ${caja.numero}` : ' · Sin caja abierta'}
           </div>
         </div>
         <div
           className={`text-xs font-bold px-3 py-1 rounded-full ${
-            caja ? 'bg-green-500/20 text-green-200' : 'bg-amber-500/20 text-amber-200'
+            caja ? 'bg-exito/20 text-crema' : 'bg-aviso/30 text-crema'
           }`}
         >
           {caja ? 'CAJA ABIERTA' : 'SIN CAJA'}
@@ -64,19 +64,21 @@ export default function App() {
       </header>
 
       <main className="flex-1 overflow-y-auto">
-        {tab === 'venta' && <Venta caja={caja} recargarCaja={refreshCaja} />}
+        {tab === 'venta' && (
+          <Venta caja={caja} recargarCaja={refreshCaja} irACaja={() => setTab('caja')} />
+        )}
         {tab === 'caja' && <Caja caja={caja} recargarCaja={refreshCaja} />}
         {tab === 'inventario' && <Inventario />}
         {tab === 'sync' && <Sync />}
       </main>
 
-      <nav className="grid grid-cols-4 gap-1 bg-white border-t border-slate-200 p-1">
+      <nav className="grid grid-cols-4 gap-1 bg-crema border-t border-taupe/40 p-1">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`py-3 rounded-lg text-sm font-bold transition ${
-              tab === t.id ? 'bg-violet-700 text-white' : 'bg-slate-100 text-slate-600'
+              tab === t.id ? 'bg-marina text-crema' : 'bg-hueso text-pizarra'
             }`}
           >
             {t.label}

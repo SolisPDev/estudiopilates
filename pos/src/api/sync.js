@@ -30,10 +30,21 @@ async function usuarioActual() {
   return Number.isFinite(id) ? id : 1
 }
 
+// Los IDs locales pueden ser textuales ('art-toalla') y el servidor espera
+// INT UNSIGNED. En ese caso se envia producto_id = null junto con el codigo,
+// y el servidor resuelve el producto por su codigo unico.
+function idNumerico(v) {
+  return typeof v === 'number' || /^\d+$/.test(String(v ?? ''))
+}
+
 async function detalleVenta(venta) {
   const usuarioId = await usuarioActual()
   const items = await db.venta_items.where('venta_id').equals(venta.id).toArray()
   const pagos = await db.pagos.where('venta_id').equals(venta.id).sortBy('venta_idx')
+
+  const ids = [...new Set(items.map((i) => i.producto_id))]
+  const prods = ids.length ? await db.productos.bulkGet(ids) : []
+  const porId = new Map(ids.map((id, k) => [id, prods[k]]))
 
   return {
     id: venta.id,
@@ -47,7 +58,8 @@ async function detalleVenta(venta) {
     total: Number(venta.total),
     items: items.map((i) => ({
       id: i.id,
-      producto_id: i.producto_id,
+      producto_id: idNumerico(i.producto_id) ? Number(i.producto_id) : null,
+      codigo: porId.get(i.producto_id)?.codigo ?? null,
       nombre: i.nombre,
       cantidad: Number(i.cantidad),
       precio_unitario: Number(i.precio_unitario),
@@ -70,7 +82,14 @@ export async function construirLote(caja) {
   const usuarioId = await usuarioActual()
   const ventas = await db.ventas.where('caja_id').equals(caja.id).toArray()
   const egresos = await db.egresos.where('caja_id').equals(caja.id).toArray()
-  const movimientos = await db.movimientos.where('caja_id').equals(caja.id).toArray()
+
+  // Movimientos de esta caja + ajustes manuales de inventario (caja_id null),
+  // que de otro modo nunca saldrian del equipo (H-003).
+  const movimientosCaja = await db.movimientos.where('caja_id').equals(caja.id).toArray()
+  const ajustesPendientes = await db.movimientos
+    .filter((m) => !m.caja_id && m.enviado !== 1)
+    .toArray()
+  const movimientos = [...movimientosCaja, ...ajustesPendientes]
 
   const ventasDetalle = []
   let totalIngresos = 0
@@ -123,15 +142,21 @@ export async function construirLote(caja) {
       responsable: e.responsable ?? null,
       fecha: e.fecha
     })),
-    movimientos: movimientos.map((m) => ({
-      id: m.id,
-      venta_id: m.venta_id ?? null,
-      producto_id: m.producto_id,
-      tipo: m.tipo,
-      cantidad: Number(m.cantidad),
-      referencia: m.referencia ?? null,
-      fecha: m.fecha
-    })),
+    movimientos: await Promise.all(
+      movimientos.map(async (m) => {
+        const prod = m.producto_id != null ? await db.productos.get(m.producto_id) : null
+        return {
+          id: m.id,
+          venta_id: m.venta_id ?? null,
+          producto_id: idNumerico(m.producto_id) ? Number(m.producto_id) : null,
+          codigo: prod?.codigo ?? null,
+          tipo: m.tipo,
+          cantidad: Number(m.cantidad),
+          referencia: m.referencia ?? null,
+          fecha: m.fecha
+        }
+      })
+    ),
     totales: {
       ventas: ventasDetalle.length,
       total: totalIngresos,
@@ -178,7 +203,10 @@ export async function enviarLote(caja) {
     for (const e of egresos) {
       await db.egresos.put({ ...e, enviado: 1 })
     }
-    const movimientos = await db.movimientos.where('caja_id').equals(caja.id).toArray()
+    const movimientos = [
+      ...(await db.movimientos.where('caja_id').equals(caja.id).toArray()),
+      ...(await db.movimientos.filter((m) => !m.caja_id && m.enviado !== 1).toArray())
+    ]
     for (const m of movimientos) {
       await db.movimientos.put({ ...m, enviado: 1 })
     }

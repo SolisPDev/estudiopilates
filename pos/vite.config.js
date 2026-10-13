@@ -20,8 +20,8 @@ export default defineConfig({
         orientation: 'portrait-primary',
         start_url: '/pos/',
         scope: '/pos/',
-        theme_color: '#5b21b6',
-        background_color: '#f8fafc',
+        theme_color: '#1d2d44',
+        background_color: '#fffef5',
         icons: [
           { src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }
         ]

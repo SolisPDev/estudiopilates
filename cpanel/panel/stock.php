@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/guard.php';
+require_admin(); // el panel de reportes es solo para el duenio (H-010)
 
 $config = require __DIR__ . '/../api/config.php';
 $dsn = sprintf('mysql:host=%s;dbname=%s;charset=utf8mb4', $config['db_host'], $config['db_name']);

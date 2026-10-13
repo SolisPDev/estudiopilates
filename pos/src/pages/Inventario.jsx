@@ -45,13 +45,13 @@ export default function Inventario() {
   return (
     <div className="max-w-4xl mx-auto p-4 space-y-4">
       {bajos.length > 0 && (
-        <div className="bg-amber-100 border-l-4 border-amber-500 text-amber-800 rounded-lg px-4 py-3">
+        <div className="bg-aviso/10 border-l-4 border-aviso text-aviso rounded-lg px-4 py-3">
           <b>Alerta:</b> {bajos.length} producto(s) por agotarse.
         </div>
       )}
 
-      <div className="bg-white rounded-2xl shadow p-4">
-        <div className="font-bold text-slate-800 mb-2">Ajuste de inventario</div>
+      <div className="bg-crema rounded-2xl shadow p-4">
+        <div className="font-bold text-marina mb-2">Ajuste de inventario</div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <select
             value={ajuste.producto_id}
@@ -80,16 +80,16 @@ export default function Inventario() {
             placeholder="Cantidad"
             className="border rounded-lg px-3 py-2"
           />
-          <button onClick={aplicarAjuste} className="bg-violet-700 text-white rounded-lg py-2 font-bold">
+          <button onClick={aplicarAjuste} className="bg-marina text-crema rounded-full px-4 py-2 font-bold uppercase tracking-wide">
             APLICAR
           </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow overflow-hidden">
+      <div className="bg-crema rounded-2xl shadow overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-slate-100 text-slate-500">
+            <tr className="bg-hueso text-pizarra">
               <th className="text-left px-4 py-2">Producto</th>
               <th className="text-left px-4 py-2">Categoría</th>
               <th className="text-right px-4 py-2">Stock</th>
@@ -103,11 +103,11 @@ export default function Inventario() {
               return (
                 <tr key={p.id} className="border-t">
                   <td className="px-4 py-2 font-semibold">{p.nombre}</td>
-                  <td className="px-4 py-2 text-slate-500">{p.categoria}</td>
-                  <td className={`px-4 py-2 text-right font-bold ${bajo ? 'text-red-600' : 'text-slate-700'}`}>
+                  <td className="px-4 py-2 text-pizarra">{p.categoria}</td>
+                  <td className={`px-4 py-2 text-right font-bold ${bajo ? 'text-error' : 'text-tinta'}`}>
                     {p.stock}
                   </td>
-                  <td className="px-4 py-2 text-right text-slate-400">{p.tipo === 'articulo' ? p.stock_minimo : '—'}</td>
+                  <td className="px-4 py-2 text-right text-taupe">{p.tipo === 'articulo' ? p.stock_minimo : '—'}</td>
                   <td className="px-4 py-2 text-right">${Number(p.precio).toFixed(2)}</td>
                 </tr>
               )

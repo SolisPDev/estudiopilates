@@ -109,9 +109,9 @@ export default function Caja({ caja, recargarCaja }) {
   if (!caja) {
     return (
       <div className="max-w-md mx-auto p-4 space-y-4">
-        <h2 className="font-bold text-lg text-slate-800">Apertura de caja</h2>
+        <h2 className="font-bold text-lg text-marina">Apertura de caja</h2>
         <div>
-          <label className="text-sm text-slate-500">Fondo inicial (efectivo)</label>
+          <label className="text-sm text-pizarra">Fondo inicial (efectivo)</label>
           <input
             type="number"
             value={fondo}
@@ -119,15 +119,15 @@ export default function Caja({ caja, recargarCaja }) {
             className="border rounded-lg px-3 py-3 w-full text-lg"
           />
         </div>
-        <button onClick={abrirCaja} className="w-full bg-violet-700 text-white rounded-xl py-4 font-bold text-lg">
+        <button onClick={abrirCaja} className="w-full bg-marina text-crema rounded-full py-4 font-bold text-lg uppercase tracking-wide">
           ABRIR CAJA
         </button>
         {mensaje.texto && (
-          <div className={`text-sm rounded-lg px-3 py-2 ${mensaje.tipo === 'ok' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          <div className={`text-sm rounded-lg px-3 py-2 ${mensaje.tipo === 'ok' ? 'bg-exito/15 text-exito' : 'bg-error/15 text-error'}`}>
             {mensaje.texto}
           </div>
         )}
-        <div className="text-xs text-slate-400 mt-4">
+        <div className="text-xs text-taupe mt-4">
           Para configurar tu token de sincronización ve a la pestaña Sync.
         </div>
       </div>
@@ -139,40 +139,40 @@ export default function Caja({ caja, recargarCaja }) {
 
   return (
     <div className="max-w-3xl mx-auto p-4 space-y-4">
-      <div className="bg-white rounded-2xl shadow p-4">
+      <div className="bg-crema rounded-2xl shadow p-4">
         <div className="flex justify-between items-center">
           <div>
-            <div className="font-bold text-slate-800">{caja.numero}</div>
-            <div className="text-xs text-slate-500">Abierta {new Date(caja.fecha_apertura).toLocaleString('es-MX')}</div>
+            <div className="font-bold text-marina">{caja.numero}</div>
+            <div className="text-xs text-pizarra">Abierta {new Date(caja.fecha_apertura).toLocaleString('es-MX')}</div>
           </div>
           <div className="text-right">
-            <div className="text-xs text-slate-500">Fondo inicial</div>
+            <div className="text-xs text-pizarra">Fondo inicial</div>
             <div className="font-bold">${Number(caja.fondo_inicial).toFixed(2)}</div>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <div className="bg-white rounded-xl p-3 shadow">
-          <div className="text-xs text-slate-500">Ventas</div>
+        <div className="bg-crema rounded-xl p-3 shadow">
+          <div className="text-xs text-pizarra">Ventas</div>
           <div className="font-bold text-lg">{resumen.ventas}</div>
         </div>
-        <div className="bg-white rounded-xl p-3 shadow">
-          <div className="text-xs text-slate-500">Efectivo</div>
-          <div className="font-bold text-lg text-green-600">${resumen.efectivo.toFixed(2)}</div>
+        <div className="bg-crema rounded-xl p-3 shadow">
+          <div className="text-xs text-pizarra">Efectivo</div>
+          <div className="font-bold text-lg text-exito">${resumen.efectivo.toFixed(2)}</div>
         </div>
-        <div className="bg-white rounded-xl p-3 shadow">
-          <div className="text-xs text-slate-500">Transferencia</div>
-          <div className="font-bold text-lg text-sky-600">${resumen.transferencia.toFixed(2)}</div>
+        <div className="bg-crema rounded-xl p-3 shadow">
+          <div className="text-xs text-pizarra">Transferencia</div>
+          <div className="font-bold text-lg text-taupe-oscuro">${resumen.transferencia.toFixed(2)}</div>
         </div>
-        <div className="bg-white rounded-xl p-3 shadow">
-          <div className="text-xs text-slate-500">Tarjeta (terminal)</div>
-          <div className="font-bold text-lg text-violet-600">${resumen.tarjeta.toFixed(2)}</div>
+        <div className="bg-crema rounded-xl p-3 shadow">
+          <div className="text-xs text-pizarra">Tarjeta (terminal)</div>
+          <div className="font-bold text-lg text-marina">${resumen.tarjeta.toFixed(2)}</div>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow p-4">
-        <div className="font-bold text-slate-800 mb-2">Egreso de caja chica</div>
+      <div className="bg-crema rounded-2xl shadow p-4">
+        <div className="font-bold text-marina mb-2">Egreso de caja chica</div>
         <div className="grid grid-cols-2 gap-2">
           <select
             value={egreso.categoria}
@@ -204,15 +204,15 @@ export default function Caja({ caja, recargarCaja }) {
             className="border rounded-lg px-3 py-2 col-span-2"
           />
         </div>
-        <button onClick={registrarEgreso} className="mt-2 bg-amber-600 text-white rounded-lg py-3 font-bold w-full">
+        <button onClick={registrarEgreso} className="mt-2 bg-aviso text-crema rounded-full py-3 font-bold w-full uppercase tracking-wide">
           REGISTRAR EGRESO
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow p-4">
-        <div className="font-bold text-slate-800 mb-1">Cierre de turno</div>
-        <div className="text-sm text-slate-600 mb-3">
-          Efectivo físico esperado: <b className="text-violet-700">${efectivoEsperado.toFixed(2)}</b>
+      <div className="bg-crema rounded-2xl shadow p-4">
+        <div className="font-bold text-marina mb-1">Cierre de turno</div>
+        <div className="text-sm text-pizarra mb-3">
+          Efectivo físico esperado: <b className="text-marina">${efectivoEsperado.toFixed(2)}</b>
           <br />
           Al cerrar se genera el lote y se sincroniza con el hosting.
         </div>
@@ -226,17 +226,17 @@ export default function Caja({ caja, recargarCaja }) {
           className="border rounded-lg px-3 py-3 w-full"
         />
         {cierre.sincronizado !== null && (
-          <div className={`text-sm rounded-lg px-3 py-2 mt-2 ${cierre.sincronizado ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          <div className={`text-sm rounded-lg px-3 py-2 mt-2 ${cierre.sincronizado ? 'bg-exito/15 text-exito' : 'bg-error/15 text-error'}`}>
             {cierre.sincronizado ? 'Lote sincronizado correctamente.' : `Lote pendiente: ${cierre.error}`}
           </div>
         )}
-        <button onClick={cerrarCaja} className="mt-3 bg-red-600 text-white rounded-xl py-4 font-bold text-lg w-full">
+        <button onClick={cerrarCaja} className="mt-3 bg-error text-crema rounded-full py-4 font-bold text-lg w-full uppercase tracking-wide">
           CERRAR CAJA Y ENVIAR CORTE
         </button>
       </div>
 
       {mensaje.texto && (
-        <div className={`text-sm rounded-lg px-3 py-2 ${mensaje.tipo === 'ok' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+        <div className={`text-sm rounded-lg px-3 py-2 ${mensaje.tipo === 'ok' ? 'bg-exito/15 text-exito' : 'bg-error/15 text-error'}`}>
           {mensaje.texto}
         </div>
       )}

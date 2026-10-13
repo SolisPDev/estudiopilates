@@ -1,14 +1,55 @@
 @import "tailwindcss";
 
+/*
+  Paleta inspirada en East River Pilates (eastriverpilates.com):
+  marino profundo como color de marca, marfil de fondo, crema y arena
+  como neutros cálidos y pizarra para texto secundario.
+*/
+@theme {
+  /* Color de marca */
+  --color-marina: #1d2d44;
+  --color-marina-claro: #2e4263;
+
+  /* Neutros cálidos (fondos) */
+  --color-marfil: #fffef5;
+  --color-crema: #fffef5;
+  --color-hueso: #f6f5e9;
+  --color-taupe: #a59f8f;
+  --color-taupe-oscuro: #7c7666;
+
+  /* Texto */
+  --color-tinta: #333333;
+  --color-pizarra: #555f61;
+
+  /* Estados, en tonos apagados que no pelean con la paleta */
+  --color-exito: #3f6b47;
+  --color-aviso: #8a6d1f;
+  --color-error: #8f3b37;
+}
+
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   touch-action: manipulation;
+}
+
+body {
+  font-family: "Libre Franklin", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Titulares en serif, como en el sitio de referencia */
+  background-color: var(--color-marfil);
+  color: var(--color-tinta);
 }
 
 button {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Titulares: serif editorial para las pantallas principales */
+h1,
+h2,
+h3 {
+  font-family: "Georgia", "Times New Roman", serif;
+  letter-spacing: -0.01em;
 }

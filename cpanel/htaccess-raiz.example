@@ -1,0 +1,34 @@
+# ------------------------------------------------------------------
+# Estudio Pilates & Barre — .htaccess de la RAIZ del sitio (cPanel)
+#
+# Copia este archivo como  public_html/.htaccess
+#
+# Distribucion esperada dentro de public_html/:
+#
+#   public_html/
+#     .htaccess                     <- este archivo
+#     pos/                          <- salida de `npm run build` (pos/dist)
+#       index.html
+#       assets/
+#       sw.js
+#     api/                          <- carpeta completa cpanel/api/
+#       public/index.php            <- front controller (no tocar)
+#       public/.htaccess
+#       src/Database.php
+#       config.php                  <- SE CREA EN EL HOSTING (no se sube)
+#     panel/                        <- carpeta completa cpanel/panel/
+#       index.php, dashboard.php, stock.php, logout.php, guard.php
+#       assets/style.css
+#
+# Requiere mod_rewrite activo y AllowOverride All para ese directorio.
+# ------------------------------------------------------------------
+
+RewriteEngine On
+
+# 1) API: /api/cierres y /api/health -> front controller.
+#    El controlador decide la ruta por sufijo, por lo que funciona igual
+#    aunque llegue /api/cierres, /api/public/index.php o /cierres.
+RewriteRule ^api/(.*)$ api/public/index.php [L]
+
+# 2) La PWA (/pos/) y el panel (/panel/) son directorios con index:
+#    no necesitan regla, Apache los sirve directo.

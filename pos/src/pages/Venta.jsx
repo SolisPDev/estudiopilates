@@ -4,12 +4,12 @@ import { uuid } from '../api/sync.js'
 import { imprimirTicket } from '../lib/impresora.js'
 
 const METODOS = [
-  { id: 'efectivo', label: 'Efectivo', color: 'bg-green-600' },
-  { id: 'transferencia', label: 'Transferencia', color: 'bg-sky-600' },
-  { id: 'tarjeta', label: 'Tarjeta', color: 'bg-violet-600' }
+  { id: 'efectivo', label: 'Efectivo', color: 'bg-exito' },
+  { id: 'transferencia', label: 'Transferencia', color: 'bg-pizarra' },
+  { id: 'tarjeta', label: 'Tarjeta', color: 'bg-marina-claro' }
 ]
 
-export default function Venta({ caja, recargarCaja }) {
+export default function Venta({ caja, recargarCaja, irACaja }) {
   const [productos, setProductos] = useState([])
   const [categoria, setCategoria] = useState('todas')
   const [cart, setCart] = useState([])
@@ -32,10 +32,13 @@ export default function Venta({ caja, recargarCaja }) {
   const subtotal = cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0)
 
   function agregar(p) {
+    if (p.tipo === 'articulo' && p.stock <= 0) return
     setCart((prev) => {
       const idx = prev.findIndex((i) => i.producto_id === p.id)
       if (idx >= 0) {
         const copia = [...prev]
+        const limite = p.tipo === 'articulo' ? Math.max(1, p.stock) : Infinity
+        if (copia[idx].cantidad >= limite) return prev
         copia[idx] = { ...copia[idx], cantidad: copia[idx].cantidad + 1 }
         return copia
       }
@@ -46,7 +49,10 @@ export default function Venta({ caja, recargarCaja }) {
   function cambiarCantidad(idx, delta) {
     setCart((prev) => {
       const copia = [...prev]
-      copia[idx] = { ...copia[idx], cantidad: Math.max(1, copia[idx].cantidad + delta) }
+      let cantidad = Math.max(1, copia[idx].cantidad + delta)
+      const prod = productos.find((p) => p.id === copia[idx].producto_id)
+      if (prod && prod.tipo === 'articulo') cantidad = Math.min(cantidad, Math.max(1, prod.stock))
+      copia[idx] = { ...copia[idx], cantidad }
       return copia
     })
   }
@@ -178,10 +184,10 @@ export default function Venta({ caja, recargarCaja }) {
     return (
       <div className="h-full grid place-items-center">
         <div className="text-center">
-          <div className="text-xl font-bold text-slate-700 mb-2">No hay caja abierta</div>
+          <div className="text-xl font-bold text-tinta mb-2">No hay caja abierta</div>
           <button
-            onClick={() => recargarCaja() && (window.location.hash = '')}
-            className="bg-violet-700 text-white px-6 py-3 rounded-xl font-bold"
+            onClick={irACaja}
+            className="bg-marina text-crema px-6 py-3 rounded-full font-bold uppercase tracking-wide"
           >
             Ir a Caja
           </button>
@@ -200,7 +206,7 @@ export default function Venta({ caja, recargarCaja }) {
               key={c}
               onClick={() => setCategoria(c)}
               className={`px-3 py-1 rounded-full text-sm font-bold ${
-                categoria === c ? 'bg-violet-700 text-white' : 'bg-white text-slate-600 border'
+                categoria === c ? 'bg-marina text-crema' : 'bg-crema text-pizarra border'
               }`}
             >
               {c}
@@ -215,18 +221,18 @@ export default function Venta({ caja, recargarCaja }) {
                 key={p.id}
                 onClick={() => agregar(p)}
                 disabled={p.tipo === 'articulo' && p.stock <= 0}
-                className={`rounded-xl p-3 text-left border-2 bg-white ${
+                className={`rounded-xl p-3 text-left border-2 bg-crema ${
                   bajoStock
-                    ? 'border-amber-500'
+                    ? 'border-aviso'
                     : p.tipo === 'articulo' && p.stock <= 0
-                      ? 'border-slate-200 opacity-40'
-                      : 'border-transparent hover:border-violet-300'
+                      ? 'border-taupe/40 opacity-40'
+                      : 'border-transparent hover:border-taupe'
                 }`}
               >
-                <div className="font-bold text-slate-800 leading-tight">{p.nombre}</div>
-                <div className="text-violet-700 font-bold mt-1">${p.precio.toFixed(2)}</div>
+                <div className="font-bold text-marina leading-tight">{p.nombre}</div>
+                <div className="text-marina font-bold mt-1">${p.precio.toFixed(2)}</div>
                 {p.tipo === 'articulo' && (
-                  <div className={`text-xs ${bajoStock ? 'text-amber-600' : 'text-slate-400'}`}>
+                  <div className={`text-xs ${bajoStock ? 'text-aviso' : 'text-taupe'}`}>
                     Stock: {p.stock}
                   </div>
                 )}
@@ -237,7 +243,7 @@ export default function Venta({ caja, recargarCaja }) {
       </section>
 
       {/* Carrito / cobro */}
-      <section className="bg-white rounded-2xl shadow p-4 flex flex-col gap-3 h-full">
+      <section className="bg-crema rounded-2xl shadow p-4 flex flex-col gap-3 h-full">
         <input
           value={cliente}
           onChange={(e) => setCliente(e.target.value)}
@@ -246,18 +252,18 @@ export default function Venta({ caja, recargarCaja }) {
         />
 
         <div className="flex-1 overflow-y-auto max-h-64">
-          {cart.length === 0 && <div className="text-slate-400 text-sm text-center py-8">Carrito vacío</div>}
+          {cart.length === 0 && <div className="text-taupe text-sm text-center py-8">Carrito vacío</div>}
           {cart.map((i, idx) => (
             <div key={i.producto_id} className="flex items-center gap-2 py-2 border-b">
               <div className="flex-1">
                 <div className="font-semibold text-sm">{i.nombre}</div>
-                <div className="text-xs text-slate-500">${i.precio.toFixed(2)} c/u</div>
+                <div className="text-xs text-pizarra">${i.precio.toFixed(2)} c/u</div>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => cambiarCantidad(idx, -1)} className="w-8 h-8 rounded bg-slate-100 font-bold">-</button>
+                <button onClick={() => cambiarCantidad(idx, -1)} className="w-8 h-8 rounded bg-hueso font-bold">-</button>
                 <span className="w-8 text-center">{i.cantidad}</span>
-                <button onClick={() => cambiarCantidad(idx, 1)} className="w-8 h-8 rounded bg-slate-100 font-bold">+</button>
-                <button onClick={() => quitar(idx)} className="w-8 h-8 rounded bg-red-100 text-red-600 font-bold">x</button>
+                <button onClick={() => cambiarCantidad(idx, 1)} className="w-8 h-8 rounded bg-hueso font-bold">+</button>
+                <button onClick={() => quitar(idx)} className="w-8 h-8 rounded bg-error/15 text-error font-bold">x</button>
               </div>
             </div>
           ))}
@@ -265,11 +271,11 @@ export default function Venta({ caja, recargarCaja }) {
 
         <div className="font-bold text-lg flex justify-between">
           <span>TOTAL</span>
-          <span className="text-violet-700">${subtotal.toFixed(2)}</span>
+          <span className="text-marina">${subtotal.toFixed(2)}</span>
         </div>
 
         {cart.length > 0 && subtotal - pagado > 0.001 && (
-          <div className="text-sm font-semibold text-amber-600 -mt-1">
+          <div className="text-sm font-semibold text-aviso -mt-1">
             Faltan ${(subtotal - pagado).toFixed(2)} por pagar
           </div>
         )}
@@ -286,9 +292,9 @@ export default function Venta({ caja, recargarCaja }) {
                   className="border rounded px-2 py-1 w-24 text-right"
                 />
                 {p.metodo === 'efectivo' && pagado > subtotal && (
-                  <span className="text-green-600 text-xs">Vuelto ${(pagado - subtotal).toFixed(2)}</span>
+                  <span className="text-exito text-xs">Vuelto ${(pagado - subtotal).toFixed(2)}</span>
                 )}
-                <button onClick={() => setPagos((prev) => prev.filter((q) => q.id !== p.id))} className="text-red-500 ml-auto">Quitar</button>
+                <button onClick={() => setPagos((prev) => prev.filter((q) => q.id !== p.id))} className="text-error ml-auto">Quitar</button>
               </div>
             ))}
           </div>
@@ -299,7 +305,7 @@ export default function Venta({ caja, recargarCaja }) {
             <button
               key={m.id}
               onClick={() => agregarPago(m.id)}
-              className={`${m.color} text-white rounded-lg py-3 font-bold text-sm`}
+              className={`${m.color} text-crema rounded-full py-3 font-bold text-sm uppercase tracking-wide`}
             >
               + {m.label}
             </button>
@@ -316,7 +322,7 @@ export default function Venta({ caja, recargarCaja }) {
         {mensaje.texto && (
           <div
             className={`text-sm rounded-lg px-3 py-2 ${
-              mensaje.tipo === 'ok' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+              mensaje.tipo === 'ok' ? 'bg-exito/15 text-exito' : 'bg-error/15 text-error'
             }`}
           >
             {mensaje.texto}
@@ -326,7 +332,7 @@ export default function Venta({ caja, recargarCaja }) {
         <button
           onClick={cobrar}
           disabled={!(cart.length > 0 && pagos.length > 0 && pagado >= subtotal - 0.001)}
-          className="bg-violet-700 disabled:bg-slate-300 text-white rounded-xl py-4 text-lg font-bold"
+          className="bg-marina disabled:bg-taupe/50 text-crema rounded-full py-4 text-lg font-bold uppercase tracking-wide"
         >
           COBRAR ${subtotal.toFixed(2)}
         </button>
@@ -334,14 +340,14 @@ export default function Venta({ caja, recargarCaja }) {
 
       {/* Modal recibo */}
       {recibo && (
-        <div className="fixed inset-0 bg-black/60 grid place-items-center p-4 z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm">
+        <div className="fixed inset-0 bg-marina/70 grid place-items-center p-4 z-50">
+          <div className="bg-crema rounded-xl p-6 w-full max-w-sm">
             <h3 className="font-bold text-lg mb-2">Venta registrada</h3>
-            <p className="text-sm text-slate-500">Folio {recibo.venta.folio}</p>
+            <p className="text-sm text-pizarra">Folio {recibo.venta.folio}</p>
             {recibo.vuelto > 0 && (
-              <p className="mt-2 text-green-700 font-bold">Vuelto: ${recibo.vuelto.toFixed(2)}</p>
+              <p className="mt-2 text-exito font-bold">Vuelto: ${recibo.vuelto.toFixed(2)}</p>
             )}
-            <button onClick={() => setRecibo(null)} className="mt-4 w-full bg-violet-700 text-white rounded-lg py-3 font-bold">
+            <button onClick={() => setRecibo(null)} className="mt-4 w-full bg-marina text-crema rounded-lg py-3 font-bold">
               Continuar
             </button>
           </div>

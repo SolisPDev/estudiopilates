@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+// Zona horaria local del estudio: los ISO-8601 que envia la PWA vienen en UTC
+// y las fechas del panel se muestran tal cual (H-012).
+date_default_timezone_set('America/Mexico_City');
+
 // API REST del sistema POS (PHP puro + PDO, sin dependencias externas).
 // Publicar este directorio (cpanel/api/public) como raiz de la app en cPanel.
 //
@@ -53,11 +57,22 @@ if ($path === '') {
     $path = '/';
 }
 
-if ($metodo === 'GET' && $path === '/api/health') {
+// Se compara por sufijo para que funcione igual con cualquiera de estos
+// despliegues (H-008):
+//   https://dominio/api/cierres          (reescritura en la raiz del sitio)
+//   https://dominio/cierres              (virtual host apuntando a public/)
+$ruta = '/';
+if (preg_match('#/api/health$|^/health$#', $path)) {
+    $ruta = '/health';
+} elseif (preg_match('#/api/cierres$|^/cierres$#', $path)) {
+    $ruta = '/cierres';
+}
+
+if ($metodo === 'GET' && $ruta === '/health') {
     resp_json(['ok' => true, 'time' => date('c')]);
 }
 
-if ($metodo === 'POST' && $path === '/api/cierres') {
+if ($metodo === 'POST' && $ruta === '/cierres') {
     autorizar($config);
 
     $raw = file_get_contents('php://input');
@@ -161,7 +176,30 @@ if ($metodo === 'POST' && $path === '/api/cierres') {
     $verificaProd = $pdo->prepare('SELECT id, stock FROM productos WHERE id = :id FOR UPDATE');
     $updateStock = $pdo->prepare('UPDATE productos SET stock = :stock WHERE id = :id AND stock <> :stock');
 
-    $nuevos = ['caja' => true, 'ventas' => 0, 'egresos' => 0, 'movimientos' => 0];
+    $buscarPorId = $pdo->prepare('SELECT id FROM productos WHERE id = :id LIMIT 1');
+    $buscarPorCodigo = $pdo->prepare('SELECT id FROM productos WHERE codigo = :codigo LIMIT 1');
+
+    // Acepta tanto el id numerico como el codigo: los ids locales de la PWA
+    // pueden ser textuales ('art-toalla') y la columna es INT UNSIGNED (H-002).
+    $resolverProducto = function ($idCrudo, $codigo) use ($buscarPorId, $buscarPorCodigo): ?int {
+        if ($idCrudo !== null && $idCrudo !== '' && is_numeric((string) $idCrudo)) {
+            $buscarPorId->execute([':id' => (int) $idCrudo]);
+            $fila = $buscarPorId->fetch();
+            if ($fila) {
+                return (int) $fila['id'];
+            }
+        }
+        if ($codigo !== null && $codigo !== '') {
+            $buscarPorCodigo->execute([':codigo' => (string) $codigo]);
+            $fila = $buscarPorCodigo->fetch();
+            if ($fila) {
+                return (int) $fila['id'];
+            }
+        }
+        return null;
+    };
+
+    $nuevos = ['caja' => true, 'ventas' => 0, 'egresos' => 0, 'movimientos' => 0, 'sin_producto' => 0];
 
     foreach ($ventas as $v) {
         $okVenta = $insertVenta->execute([
@@ -182,7 +220,7 @@ if ($metodo === 'POST' && $path === '/api/cierres') {
             $insertItem->execute([
                 ':id' => (string) ($i['id'] ?? ''),
                 ':venta_id' => (string) ($v['id'] ?? ''),
-                ':producto_id' => $i['producto_id'] ?? null,
+                ':producto_id' => $resolverProducto($i['producto_id'] ?? null, $i['codigo'] ?? null),
                 ':nombre' => (string) ($i['nombre'] ?? 'Producto'),
                 ':cantidad' => $i['cantidad'] ?? 1,
                 ':precio' => redondear($i['precio_unitario'] ?? 0),
@@ -217,21 +255,26 @@ if ($metodo === 'POST' && $path === '/api/cierres') {
     }
 
     foreach ($movimientos as $m) {
+        $pidMov = $resolverProducto($m['producto_id'] ?? null, $m['codigo'] ?? null);
+        if ($pidMov === null) {
+            // Sin producto equivalente en el servidor: no se aplica al stock.
+            $nuevos['sin_producto']++;
+            continue;
+        }
         if ($insertMov->execute([
             ':id' => (string) ($m['id'] ?? ''),
-            ':producto_id' => $m['producto_id'] ?? 0,
+            ':producto_id' => $pidMov,
             ':tipo' => (string) ($m['tipo'] ?? 'venta'),
             ':cantidad' => redondear($m['cantidad'] ?? 0),
             ':referencia' => $m['referencia'] ?? null,
             ':fecha' => dt($m['fecha'] ?? null) ?? date('Y-m-d H:i:s'),
         ]) && $insertMov->rowCount() > 0) {
             $nuevos['movimientos']++;
-            $pid = (int) ($m['producto_id'] ?? 0);
-            $verificaProd->execute([':id' => $pid]);
+            $verificaProd->execute([':id' => $pidMov]);
             $prod = $verificaProd->fetch();
             if ($prod) {
                 $nuevoStock = max(0.0, (float) $prod['stock'] + (float) $m['cantidad']);
-                $updateStock->execute([':stock' => $nuevoStock, ':id' => $pid]);
+                $updateStock->execute([':stock' => $nuevoStock, ':id' => $pidMov]);
             }
         }
     }
