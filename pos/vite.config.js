@@ -39,6 +39,15 @@ export default defineConfig({
   ],
   server: {
     port: 5137,
-    host: true
+    host: true,
+    // Solo para desarrollo local. En produccion la PWA se publica en el mismo
+    // dominio que la API (https://dominio/pos/ + https://dominio/api/), de modo
+    // que fetch('/api/...') es same-origin y no hay CORS que resolver. Cuando la
+    // API corre en otro host (p. ej. un arnés de pruebas) se fija
+    // VITE_API_PROXY para que el dev server la reenvie bajo la misma ruta /api,
+    // que es exactamente el esquema de produccion.
+    proxy: process.env.VITE_API_PROXY
+      ? { '/api': { target: process.env.VITE_API_PROXY, changeOrigin: true } }
+      : undefined
   }
 })

@@ -19,6 +19,41 @@ export async function guardarToken(token) {
   await guardarConfig(TOKEN_KEY, token)
 }
 
+// Descarga el directorio de usuarios del servidor para el login (H-009).
+// El servidor devuelve solo id, nombre y rol; el PIN se guarda localmente en
+// cada equipo y jamas viaja por la red. Conserva el PIN ya definido.
+export async function sincronizarUsuarios() {
+  const token = await obtenerToken()
+  const res = await fetch(`${API_BASE}/usuarios`, {
+    headers: { 'X-Api-Token': token }
+  })
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`
+    try {
+      const j = await res.json()
+      msg = j.error ?? msg
+    } catch {
+      /* sin cuerpo JSON */
+    }
+    throw new Error(msg)
+  }
+
+  const json = await res.json()
+  const lista = Array.isArray(json.usuarios) ? json.usuarios : []
+
+  const existentes = await db.usuarios.toArray()
+  const pinPorId = new Map(existentes.map((u) => [u.id, u.pin_hash]))
+  await db.usuarios.bulkPut(
+    lista.map((u) => ({
+      id: Number(u.id),
+      nombre: u.nombre,
+      rol: u.rol ?? 'recepcionista',
+      pin_hash: pinPorId.get(Number(u.id)) ?? null
+    }))
+  )
+  return lista.length
+}
+
 async function usuarioActual() {
   const id = parseInt((await obtenerConfig('usuario_id')) ?? '1', 10)
   return Number.isFinite(id) ? id : 1
@@ -225,6 +260,81 @@ export async function enviarLote(caja) {
   return json
 }
 
+// Envia una venta individual en el momento del cobro, sin esperar al cierre
+// de caja (H-007). La caja viaja "abierta": su cierre y sus totales llegan
+// despues, con enviarLote. Si no hay red, la venta queda pendiente y la
+// reenvia sincronizarPendientes.
+export async function enviarVenta(venta) {
+  const token = await obtenerToken()
+  const caja = await db.cajas.get(venta.caja_id)
+  if (!caja) throw new Error('La venta no tiene caja asociada')
+
+  const detalle = await detalleVenta(venta)
+  const movimientos = await db.movimientos.where('venta_id').equals(venta.id).toArray()
+
+  const cuerpo = {
+    caja: {
+      id: caja.id,
+      numero: caja.numero,
+      usuario_id_apertura: caja.usuario_apertura ?? (await usuarioActual()),
+      fondo_inicial: Number(caja.fondo_inicial ?? 0),
+      fecha_apertura: caja.fecha_apertura
+    },
+    ventas: [detalle],
+    movimientos: await Promise.all(
+      movimientos.map(async (m) => {
+        const prod = m.producto_id != null ? await db.productos.get(m.producto_id) : null
+        return {
+          id: m.id,
+          venta_id: m.venta_id ?? null,
+          producto_id: idNumerico(m.producto_id) ? Number(m.producto_id) : null,
+          codigo: prod?.codigo ?? null,
+          tipo: m.tipo,
+          cantidad: Number(m.cantidad),
+          referencia: m.referencia ?? null,
+          fecha: m.fecha
+        }
+      })
+    )
+  }
+
+  const res = await fetch(`${API_BASE}/ventas`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Api-Token': token },
+    body: JSON.stringify(cuerpo)
+  })
+
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`
+    try {
+      const j = await res.json()
+      msg = j.detalle ?? j.error ?? msg
+    } catch {
+      /* sin cuerpo JSON */
+    }
+    throw new Error(msg)
+  }
+
+  const json = await res.json()
+
+  // El servidor lista las ventas que no pudo registrar por colision de folio.
+  // Esas no se marcan como enviadas (H-011).
+  const perdidas = new Set(
+    (json?.ventas_perdidas ?? []).map((p) => (typeof p === 'string' ? p : p.id)).filter(Boolean)
+  )
+
+  if (!perdidas.has(venta.id)) {
+    await db.transaction('rw', db.ventas, db.movimientos, async () => {
+      await db.ventas.put({ ...venta, enviada: 1 })
+      for (const m of movimientos) {
+        await db.movimientos.put({ ...m, enviado: 1 })
+      }
+    })
+  }
+
+  return json
+}
+
 // Registra el lote como pendiente/fallido segun el resultado.
 export async function marcarLote(idCaja, estado, error) {
   const id = `CIERRE-${idCaja}`
@@ -244,8 +354,32 @@ export async function lotesPendientes() {
 }
 
 export async function sincronizarPendientes() {
-  const pendientes = await lotesPendientes()
   const resultados = []
+
+  // 1) Ventas de cajas todavia abiertas que no llegaron al cobrarse (H-007).
+  //    Las de cajas ya cerradas viajan dentro del lote de cierre, asi que no
+  //    se reenvian aqui para no duplicar peticiones.
+  if (navigator.onLine) {
+    const abiertas = await db.cajas.where('estado').equals('abierta').toArray()
+    for (const caja of abiertas) {
+      const sueltas = await db.ventas
+        .where('caja_id')
+        .equals(caja.id)
+        .filter((v) => v.enviada !== 1)
+        .toArray()
+      for (const v of sueltas) {
+        try {
+          await enviarVenta(v)
+          resultados.push({ venta_id: v.id, folio: v.folio, ok: true })
+        } catch (err) {
+          resultados.push({ venta_id: v.id, folio: v.folio, ok: false, error: err.message })
+        }
+      }
+    }
+  }
+
+  // 2) Lotes de cierre de turno pendientes.
+  const pendientes = await lotesPendientes()
   for (const lote of pendientes) {
     const caja = await db.cajas.get(lote.caja_id)
     if (!caja || caja.estado !== 'cerrada') continue

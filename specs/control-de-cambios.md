@@ -3,7 +3,7 @@
 Documento de seguimiento de modificaciones al proyecto `c:\proyectos\estudiopilates`.
 
 - **Última actualización:** 2026-10-13
-- **Estado del proyecto:** MVP funcional en local (PWA) con identidad visual aplicada; API y panel sin ejecutar todavía.
+- **Estado del proyecto:** MVP funcional en local (PWA) con identidad visual, sesión con PIN y envío de ventas al cobrar; API ejecutándose sobre SQLite para pruebas, panel y MySQL aún sin ejecutar.
 - **Rama:** `main` · **Remoto:** `https://github.com/SolisPDev/estudiopilates.git`
 
 ---
@@ -58,6 +58,9 @@ Cuando un hallazgo de la **sección 4** se corrija, se registra su `CAM-###` en 
 | CAM-017 | 2026-10-13 | fix | `pos/src/db/database.js`, `pos/src/api/sync.js`, `pos/src/pages/Caja.jsx`, `pos/src/pages/Venta.jsx`, `cpanel/api/public/index.php` | Aplicado | **Colisión multi-dispositivo (H-011).** Cada equipo persiste un `dispositivo_id` (UUID) y usa su sufijo de 4 caracteres en los dos identificadores que no distinguían equipo: `cajas.numero` → `C-AAAAMMDD-XXXX` y `ventas.folio` → `V-MMDD-XXXX-NNNN`. En el servidor se sustituye el `INSERT ... ON DUPLICATE KEY UPDATE` de `cajas` (que se activa ante **cualquier** unique key y por tanto reescribía la caja del otro equipo) por `INSERT IGNORE` + detección vía `rowCount()` del `UPDATE ... WHERE id`, devolviendo `409 colision_caja`. Además `ventas` distingue ahora "ya sincronizada" de "descartada por folio ajeno" y responde `ventas_perdidas`, campo que la PWA usa para **no** marcar esas ventas como `enviada`. `uuid()` se unificó en `database.js` y se reexporta desde `sync.js`. | **Verificado en vivo (PWA):** la BD local tenía 3 cajas en `C-20261013`; la nueva quedó `C-20261013-973C` y la venta `V-1013-973C-0003`. **Verificado (servidor):** `php -l` limpio y prueba que ejecuta las sentencias SQL reales extraídas de `index.php` sobre SQLite con `UNIQUE(numero)`: 8/8 comprobaciones (colisión detectada, caja ajena **no** reescrita, reenvío idempotente). **No ejecutado contra MySQL real** (sin servidor disponible). |
 | CAM-018 | 2026-10-13 | refactor | `cpanel/panel/stock.php`, `cpanel/panel/dashboard.php` | Aplicado | **Conexión PDO duplicada (H-017).** Ambos archivos del panel construían su propio `DSN` y `new PDO(...)` en vez de reutilizar la fábrica `Database::pdo()`, con un conjunto de atributos ligeramente distinto (faltaba `ATTR_EMULATE_PREPARES => false`). Se sustituyen por `require Database.php` + `Database::pdo()`. | `php -l` limpio en ambos archivos. **No ejecutado contra MySQL real.** |
 | CAM-019 | 2026-10-13 | fix | `pos/index.html`, `pos/vite.config.js`, `pos/public/icons/{apple-touch-icon,icon-192,icon-512}.png` | Aplicado | **Sin icono para iOS (H-019).** El manifest solo declaraba `icon.svg`, y iOS **ignora** el SVG tanto en el manifest como en `apple-touch-icon`. Se rasteriza el propio `icon.svg` (canvas del navegador, mismo origen) a PNG 180×180, 192×192 y 512×512; se añaden al manifest (`any` y `maskable`) y se declara `<link rel="apple-touch-icon">` más las metas `apple-mobile-web-app-*` / `mobile-web-app-capable` para que la app instalada abra en standalone. | **Verificado:** cabeceras PNG de 180/192/512 px; análisis de píxeles del `apple-touch-icon` confirma 27 963 px en el marino exacto `rgb(29,45,68)`; `npm run build` OK (precache 7 → 13 entradas) y manifest generado con los 4 iconos. |
+| CAM-020 | 2026-10-13 | feat | `cpanel/api/public/index.php`, `pos/src/api/sync.js`, `pos/src/pages/Venta.jsx` | Aplicado | **Las ventas solo viajan al cerrar caja (H-007).** Nuevo endpoint `POST /api/ventas` que registra la venta **en el momento del cobro**. Se extraen `registrarCajaAbierta()` y `registrarDetalles()` y se reutilizan en `/cierres` (569 → 452 líneas), de modo que ambos caminos comparten el alta de caja, detalles y movimientos. La caja viaja en estado `abierta`: `CONSTRAINT fk_ventas_caja` impediría insertar la venta si su caja aún no existe en el servidor. En la PWA, `Venta.jsx` llama `enviarVenta()` tras imprimir y `sincronizarPendientes()` reintenta las ventas de cajas aún abiertas, no solo los cierres. **Corrección derivada de la prueba:** al sustituirse el `INSERT ... ON DUPLICATE KEY UPDATE` de H-011 por `INSERT IGNORE`, el `UPDATE ... SET total_ventas` dejó de fijar `estado`; una caja creada antes por `/api/ventas` **nunca se cerraba**. Se devuelven `estado`, `fecha_cierre` y `usuario_id_cierre` a ese `UPDATE`. | **Verificado en servidor:** arnés que sirve el `index.php` real (idéntico por SHA-256) sobre SQLite con `UNIQUE` y `FOREIGN KEY` activas → **19/19 comprobaciones**: alta de caja + venta, stock aplicado, reenvío idempotente (0 duplicados, stock no vuelve a bajar), caja abierta tras `/ventas` y **cerrada** con totales correctos tras `/cierres`. **Verificado en vivo (PWA):** cobro de Shake $45 → en el servidor aparece la caja `C-20261014-F042` (`abierta`, fondo 500) y la venta `V-1014-F042-0001` con `usuario_id: 2`; stock 59 → 58 en servidor y 60 → 59 en local; Sync informa `Sincronizar pendientes (0)`. **No ejecutado contra MySQL real.** |
+| CAM-021 | 2026-10-13 | feat | `pos/src/pages/Login.jsx` (nuevo), `pos/src/lib/pin.js` (nuevo), `pos/src/App.jsx`, `pos/src/api/sync.js`, `cpanel/api/public/index.php` | Aplicado | **Sin usuario real en el POS (H-009).** `App.jsx` pasa a exigir sesión: sin `usuario_id` se muestra `Login`, con botón **SALIR**. Cada persona elige su nombre y se identifica con un **PIN local** de 4 a 6 dígitos guardado como SHA-256 en IndexedDB (`pin.js`): los hashes seed son bcrypt `$2y$`, inverificables desde JS, y el POS es offline-first. El `usuario_id` que se persiste es el **real del servidor** para respetar `fk_ventas_usuario`. Nuevo `GET /api/usuarios` que devuelve **solo** `id`, `nombre`, `rol` (nunca `password_hash`), y `sincronizarUsuarios()` conserva el `pin_hash` local al refrescar el directorio. | **Verificado en servidor:** `GET /api/usuarios` → **401 sin token**, `200` con token y cuerpo limitado a `id`/`nombre`/`rol`. **Verificado en vivo (PWA):** descarga del directorio (aparecen Administrador y Recepción) → definición de PIN en el primer uso → **PIN erróneo rechazado** ("PIN incorrecto") → **PIN correcto aceptado** → sesión restaurada tras salir. Que la venta registrada haya quedado con `usuario_id: 2` (Recepción) y no `1` confirma que el id real del servidor fluye desde el login hasta el cobro. **No ejecutado contra MySQL real.** |
+| CAM-022 | 2026-10-13 | infra | `pos/vite.config.js`, `pos/src/pages/Login.jsx` | Aplicado | **Dos bloqueos del primer arranque detectados al verificar H-009/H-007.** (1) *CORS*: el dev server corre en `localhost:5137` y la API en otro origen, cosa que en producción no ocurre (la PWA se publica en el mismo dominio que `/api`). En vez de añadir cabeceras CORS al código de producción se agrega un `server.proxy` **optativo** con `VITE_API_PROXY`, que reenvía `/api` bajo la misma ruta y mismo origen que en producción. (2) *Circuito cerrado del token*: `Sync` quedó detrás del login, pero entrar exige descargar el directorio, que a su vez exige el token → un equipo nuevo no podía configurarse. Se añade "Configurar token de la API" en la propia pantalla de acceso. | **Verificado en vivo:** `VITE_API_PROXY=http://127.0.0.1:8010` → `GET /api/usuarios` por el dev server responde **200 con token y 401 sin él**; token guardado desde el login y descarga de usuarios completada. `npm run dev` sin la variable queda sin proxy (comportamiento de producción intacto). |
 
 ---
 
@@ -74,9 +77,9 @@ Cuando un hallazgo de la **sección 4** se corrija, se registra su `CAM-###` en 
 
 | ID | Archivo:línea | Hallazgo | Evidencia |
 |---|---|---|---|
-| H-007 | `pos/src/api/sync.js` | **Las ventas solo viajan al cerrar caja.** Sin sync por venta ni exportación de respaldo. | **Confirmado en vivo:** al cerrar la pestaña se borró IndexedDB y se perdieron la venta, el egreso y el estado de caja. |
+| H-007 | `pos/src/api/sync.js` | ~~Las ventas solo viajan al cerrar caja~~ → cerrado en **CAM-020**. | — |
 | H-008 | `cpanel/api/public/index.php` + `pos/vite.config.js` | ~~La ruta `/api` no resuelve sin un `.htaccess` raíz~~ → cerrado en **CAM-011** + **CAM-013**. | — |
-| H-009 | `pos/src/api/sync.js:29` · `pos/src/App.jsx:30` | **Sin usuario real en el POS.** No hay login; `usuario_id` siempre es `1` y `usuario_nombre` nunca se escribe. Toda venta queda atribuida al admin. | Revisión de código. |
+| H-009 | `pos/src/api/sync.js:29` · `pos/src/App.jsx:30` | ~~Sin usuario real en el POS~~ → cerrado en **CAM-021**. | — |
 | H-010 | `cpanel/panel/dashboard.php:3`, `stock.php:3` | ~~`require_admin()` nunca se llama~~ → cerrado en **CAM-012**. | — |
 | H-011 | `cpanel/api/public/index.php:94` + `db/schema.sql:72` | ~~Colisión con 2 dispositivos~~ → cerrado en **CAM-017**. | — |
 | H-012 | `cpanel/api/public/index.php:34` | ~~Zona horaria~~ → cerrado en **CAM-011**. | — |
@@ -105,7 +108,9 @@ Cuando un hallazgo de la **sección 4** se corrija, se registra su `CAM-###` en 
 | H-004 | Cobro en efectivo no completaba el total (> $500) | **CAM-003** | 2026-10-13 |
 | H-005 | Sobrepaga/vuelto bloqueado | **CAM-004** | 2026-10-13 |
 | H-006 | Modal de recibo nunca aparecía | **CAM-005** | 2026-10-13 |
+| H-007 | Las ventas solo viajan al cerrar caja (pérdida de datos) | **CAM-020** | 2026-10-13 |
 | H-008 | `/api` no resolvía en cPanel sin `.htaccess` raíz | **CAM-011** + **CAM-013** | 2026-10-13 |
+| H-009 | Sin usuario real en el POS (`usuario_id` siempre 1) | **CAM-021** | 2026-10-13 |
 | H-010 | Panel web sin autorización (`require_admin()` sin llamar) | **CAM-012** | 2026-10-13 |
 | H-011 | Colisión multi-dispositivo en `cajas.numero` y `ventas.folio` | **CAM-017** | 2026-10-13 |
 | H-012 | Zona horaria de corte no fijada | **CAM-011** | 2026-10-13 |
@@ -192,6 +197,39 @@ Entorno: `pos/` con `npm run dev` en `http://localhost:5137/pos/`, Chrome, sin A
 
 > **Nota de verificación (H-017):** el cambio es un refactoring de una sola línea por archivo con comportamiento equivalente al anterior (de hecho corrige el que faltara `ATTR_EMULATE_PREPARES => false`), pero **no se ejecutó contra MySQL real** por la misma razón del lote 4.
 
+### Lote 6 · sync por venta y sesión con PIN (H-007, H-009)
+
+Entorno: `php -S 127.0.0.1:8010` sirviendo el **`index.php` real** (verificado idéntico por SHA-256) sobre SQLite con `UNIQUE` y `FOREIGN KEY` activas, más la PWA en `http://localhost:5137/pos/` con `VITE_API_PROXY` apuntando a ese servidor.
+
+| # | Prueba | Resultado |
+|---|---|---|
+| 41 | `GET /health` | ✅ `200 {"ok":true}` |
+| 42 | `GET /api/usuarios` sin token | ✅ `401` |
+| 43 | `GET /api/usuarios` con token | ✅ `200`, cuerpo **solo** con `id`/`nombre`/`rol` — ningún `password_hash` se fuga |
+| 44 | `POST /api/ventas` con caja inexistente en el servidor | ✅ `200`, `nuevos.ventas: 1`, 1 movimiento de stock, `ventas_perdidas: []` — la FK `fk_ventas_caja` se satisface porque la caja viaja en el payload |
+| 45 | Reenvío idéntico de la misma venta | ✅ `200`, `nuevos.ventas: 0`, `nuevos.movimientos: 0` (sin duplicar ni bajar el stock dos veces) |
+| 46 | Estado de la caja tras `/api/ventas` | ✅ `abierta`, `total_ventas: 0` (el cierre no se adelanta) |
+| 47 | Stock aplicado | ✅ `ART-SHAKE` 60 → 59 |
+| 48 | `POST /api/cierres` con la misma venta | ✅ `200`, no duplica, caja → **`cerrada`**, `total_ventas: 1`, `total_efectivo: 45`, `efectivo_esperado: 545` (fondo 500 + 45), stock sigue en 59 |
+| 49 | **Regresión detectada por la prueba 48** | ❌→✅ la caja **no se marcaba `cerrada`**: el `INSERT IGNORE` de H-011 no reescribía una fila existente y el `UPDATE` de totales ya no fijaba `estado`. Corregido en **CAM-020**. **19/19** tras el arreglo |
+| 50 | PWA: configurar token desde la pantalla de acceso | ✅ "Token guardado. Ya puedes descargar los usuarios." |
+| 51 | PWA: descarga del directorio | ✅ aparecen **Administrador (admin)** y **Recepción (recepcionista)** |
+| 52 | PWA: definir PIN en el primer uso | ✅ "Define tu PIN para este equipo (4 a 6 dígitos)" → entrada directa |
+| 53 | PWA: PIN incorrecto | ✅ rechazado con "PIN incorrecto", sin entrar |
+| 54 | PWA: PIN correcto | ✅ dentro, cabecera "Recepción · Caja C-20261014-F042" |
+| 55 | PWA: sesión restaurada al volver a entrar | ✅ vuelve a pedir PIN (hash persistido), no ofrece definirlo |
+| 56 | PWA: apertura de caja | ✅ `C-20261014-F042`, fondo $500 |
+| 57 | PWA: cobro de Shake $45 en efectivo | ✅ servidor con caja `C-20261014-F042` (`abierta`) + venta `V-1014-F042-0001` con **`usuario_id: 2`** |
+| 58 | Stock local y de servidor tras la venta | ✅ local 60 → 59; servidor 60 → 58 (incluye la venta del arnés del nº 47) |
+| 59 | Pestaña Sync tras el cobro | ✅ `Sincronizar pendientes (0)` — sin lotes fallidos |
+| 60 | `php -l` sobre `index.php` | ✅ sin errores de sintaxis |
+
+> **Bugs encontrados al verificar y corregidos:** (1) la caja nunca se cerraba (prueba 49, CAM-020); (2) **circuito cerrado del token**: `Sync` quedó tras el login, pero entrar exige descargar el directorio, que exige el token → un equipo nuevo no podía configurarse (CAM-022); (3) el dev server no podía alcanzar la API por CORS, resuelto con el proxy optativo `VITE_API_PROXY` en vez de añadir cabeceras CORS a producción (CAM-022).
+>
+> **Nota de verificación:** el servidor se ejecutó sobre **SQLite**, no MySQL. Las sentencias las emite el `index.php` real, pero faltan diferencias propias de MySQL (`rowCount()` en `INSERT IGNORE`, manejo de tipos y de `FOR UPDATE`). **Queda pendiente de confirmar contra MySQL real**, igual que CAM-011, CAM-012, CAM-017 y CAM-018.
+>
+> **Observación menor (no corregida):** `cajas.numero` se construye con `toISOString()` (UTC) y `fecha_apertura` con hora local, de modo que en horario nocturno el número puede llevar la fecha del día siguiente. No afecta la unicidad por equipo, pero conviene unificarlo.
+
 ---
 
 ## 6. Próximos pasos
@@ -203,8 +241,10 @@ Entorno: `pos/` con `npm run dev` en `http://localhost:5137/pos/`, Chrome, sin A
 5. ~~Nueva identidad visual~~ → **hecho y verificado (CAM-015)**.
 6. ~~Atacar H-011 (colisión multi-dispositivo)~~ → **hecho y verificado (CAM-017)**.
 7. ~~Atacar H-017 (PDO duplicado) e H-019 (icono iOS)~~ → **hecho (CAM-018, CAM-019)**.
-8. Atacar **H-007** (sync por venta: las ventas solo viajan al cerrar caja) — es el hallazgo de pérdida de datos más grande que queda.
-9. Atacar **H-009** (login real en la PWA) y **H-013** (impresora / popup bloqueado).
-10. Reintentar la prueba de UI de CAM-009 (tope de stock) y CAM-010 (indicador online) cuando el navegador vuelva a responder de forma estable.
-11. Verificar CAM-011, CAM-012, CAM-017 y CAM-018 contra MySQL real (Opción B).
-12. Atacar H-016 (endurecer el login del panel) y H-021 (tests, linter, CI).
+8. ~~Atacar **H-007** (sync por venta)~~ → **hecho y verificado (CAM-020)**.
+9. ~~Atacar **H-009** (login real en la PWA)~~ → **hecho y verificado (CAM-021)**.
+10. Atacar **H-013** (impresora / popup bloqueado) — al cobrar se abrió una pestaña `about:blank` que la automatización tuvo que cerrar a mano; sigue sin aviso al usuario si el navegador lo bloquea.
+11. Reintentar la prueba de UI de CAM-009 (tope de stock) y CAM-010 (indicador online) cuando el navegador vuelva a responder de forma estable.
+12. Verificar CAM-011, CAM-012, CAM-017, CAM-018, CAM-020 y CAM-021 contra **MySQL real** (Opción B) — es lo único que falta para dar por cerrados H-007, H-009, H-011, H-017 y H-019 sin reservas.
+13. Unificar la fecha de `cajas.numero` (UTC) con la de `fecha_apertura` (local), observada en el lote 6.
+14. Atacar H-016 (endurecer el login del panel) y H-021 (tests, linter, CI).

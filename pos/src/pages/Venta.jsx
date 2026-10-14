@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { db, obtenerConfig, guardarConfig, sufijoDispositivo } from '../db/database.js'
-import { uuid } from '../api/sync.js'
+import { uuid, enviarVenta } from '../api/sync.js'
 import { imprimirTicket } from '../lib/impresora.js'
 
 const METODOS = [
@@ -177,6 +177,9 @@ export default function Venta({ caja, recargarCaja, irACaja }) {
         numero_caja: caja.numero
       }
       await imprimirTicket(venta, itemsDelCarrito, pagosFinales, config)
+      // Sync por venta (H-007): no bloquea el cobro. Sin red, la venta queda
+      // con enviada = 0 y la reintenta sincronizarPendientes al volver online.
+      enviarVenta(venta).catch(() => {})
       limpiar()
       setRecibo({ venta, items: itemsDelCarrito, pagos: pagosFinales, vuelto: Math.max(0, pagado - subtotal) })
       setMensaje({ tipo: 'ok', texto: `Venta ${venta.folio} registrada` })

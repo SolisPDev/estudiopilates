@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { db, semillaInicial, obtenerConfig } from './db/database.js'
+import { db, semillaInicial, obtenerConfig, guardarConfig } from './db/database.js'
 import { sincronizarPendientes } from './api/sync.js'
 import Venta from './pages/Venta.jsx'
 import Caja from './pages/Caja.jsx'
 import Inventario from './pages/Inventario.jsx'
 import Sync from './pages/Sync.jsx'
+import Login from './pages/Login.jsx'
 
 const TABS = [
   { id: 'venta', label: 'Venta' },
@@ -16,7 +17,8 @@ const TABS = [
 export default function App() {
   const [tab, setTab] = useState('venta')
   const [caja, setCaja] = useState(null)
-  const [usuario, setUsuario] = useState('')
+  // null = sin sesion: no se opera nadie sin identificarse (H-009).
+  const [usuario, setUsuario] = useState(null)
   const [listo, setListo] = useState(false)
 
   async function refreshCaja() {
@@ -24,11 +26,29 @@ export default function App() {
     setCaja(activa ?? null)
   }
 
+  async function cargarSesion() {
+    const id = await obtenerConfig('usuario_id')
+    if (!id) {
+      setUsuario(null)
+      return
+    }
+    const nombre = await obtenerConfig('usuario_nombre')
+    const rol = await obtenerConfig('usuario_rol')
+    setUsuario({ id, nombre: nombre ?? 'Recepción', rol: rol ?? 'recepcionista' })
+  }
+
+  async function salir() {
+    await guardarConfig('usuario_id', '')
+    await guardarConfig('usuario_nombre', '')
+    await guardarConfig('usuario_rol', '')
+    setUsuario(null)
+    setTab('venta')
+  }
+
   useEffect(() => {
     ;(async () => {
       await semillaInicial()
-      const nombre = await obtenerConfig('usuario_nombre')
-      setUsuario(nombre ?? 'Recepción')
+      await cargarSesion()
       await refreshCaja()
       setListo(true)
     })()
@@ -44,22 +64,35 @@ export default function App() {
     return <div className="h-full grid place-items-center text-pizarra">Cargando...</div>
   }
 
+  if (!usuario) {
+    return <Login alEntrar={cargarSesion} />
+  }
+
   return (
     <div className="h-full flex flex-col bg-hueso">
       <header className="bg-marina text-crema px-4 py-3 flex items-center justify-between">
         <div>
           <div className="font-serif text-lg font-bold leading-tight">Estudio Pilates &amp; Barre</div>
           <div className="text-xs text-crema/70">
-            {usuario}
+            {usuario.nombre}
             {caja ? ` · Caja ${caja.numero}` : ' · Sin caja abierta'}
           </div>
         </div>
-        <div
-          className={`text-xs font-bold px-3 py-1 rounded-full ${
-            caja ? 'bg-exito/20 text-crema' : 'bg-aviso/30 text-crema'
-          }`}
-        >
-          {caja ? 'CAJA ABIERTA' : 'SIN CAJA'}
+        <div className="flex items-center gap-2">
+          <div
+            className={`text-xs font-bold px-3 py-1 rounded-full ${
+              caja ? 'bg-exito/20 text-crema' : 'bg-aviso/30 text-crema'
+            }`}
+          >
+            {caja ? 'CAJA ABIERTA' : 'SIN CAJA'}
+          </div>
+          <button
+            onClick={salir}
+            title="Cerrar sesión"
+            className="text-xs font-bold px-3 py-1 rounded-full bg-crema/15 text-crema"
+          >
+            SALIR
+          </button>
         </div>
       </header>
 
