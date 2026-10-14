@@ -56,6 +56,8 @@ Cuando un hallazgo de la **sección 4** se corrija, se registra su `CAM-###` en 
 | CAM-015 | 2026-10-13 | feat | `pos/src/styles.css`, `pos/src/App.jsx`, `pos/src/pages/{Venta,Caja,Inventario,Sync}.jsx`, `pos/index.html`, `pos/vite.config.js`, `pos/public/icons/icon.svg` | Aplicado | **Nueva identidad visual.** Se reemplaza la paleta genérica violeta/slate de Tailwind por tokens semánticos propios (`@theme`) tomados de **eastriverpilates.com**: marino `#1d2d44` (marca), marfil `#fffef5` (fondo), crema `#f6f5e9`, arena `#a59f8f`, pizarra `#555f61`, tinta `#333333`; estados apagados (`exito`/`aviso`/`error`) que no pelean con la paleta. Titulares en serif, botones principales en píldora con mayúsculas y `tracking-wide`. También se actualizan `theme_color`, `background_color` del manifest y el icono SVG. | **Verificado en vivo:** `getComputedStyle` confirma header `rgb(29,45,68)`, fondo `rgb(255,254,245)`, pestaña activa marino; capturas de Venta, Caja y Apertura. `npm run build` OK (PWA 282.75 KiB). |
 | CAM-016 | 2026-10-13 | fix | `pos/src/pages/Venta.jsx`, `pos/src/App.jsx` | Aplicado | **Botón "Ir a Caja" no navegaba.** Fijaba `window.location.hash = ''`, pero la navegación por pestañas usa `useState` en `App.jsx`, no hash: el clic solo refrescaba la caja y la vista no cambiaba. Se pasa `irACaja={() => setTab('caja')}` a `Venta` y se usa como `onClick`. | **Verificado en vivo:** con la caja cerrada, el clic en "IR A CAJA" lleva a la pestaña Caja ("Apertura de caja"). |
 | CAM-017 | 2026-10-13 | fix | `pos/src/db/database.js`, `pos/src/api/sync.js`, `pos/src/pages/Caja.jsx`, `pos/src/pages/Venta.jsx`, `cpanel/api/public/index.php` | Aplicado | **Colisión multi-dispositivo (H-011).** Cada equipo persiste un `dispositivo_id` (UUID) y usa su sufijo de 4 caracteres en los dos identificadores que no distinguían equipo: `cajas.numero` → `C-AAAAMMDD-XXXX` y `ventas.folio` → `V-MMDD-XXXX-NNNN`. En el servidor se sustituye el `INSERT ... ON DUPLICATE KEY UPDATE` de `cajas` (que se activa ante **cualquier** unique key y por tanto reescribía la caja del otro equipo) por `INSERT IGNORE` + detección vía `rowCount()` del `UPDATE ... WHERE id`, devolviendo `409 colision_caja`. Además `ventas` distingue ahora "ya sincronizada" de "descartada por folio ajeno" y responde `ventas_perdidas`, campo que la PWA usa para **no** marcar esas ventas como `enviada`. `uuid()` se unificó en `database.js` y se reexporta desde `sync.js`. | **Verificado en vivo (PWA):** la BD local tenía 3 cajas en `C-20261013`; la nueva quedó `C-20261013-973C` y la venta `V-1013-973C-0003`. **Verificado (servidor):** `php -l` limpio y prueba que ejecuta las sentencias SQL reales extraídas de `index.php` sobre SQLite con `UNIQUE(numero)`: 8/8 comprobaciones (colisión detectada, caja ajena **no** reescrita, reenvío idempotente). **No ejecutado contra MySQL real** (sin servidor disponible). |
+| CAM-018 | 2026-10-13 | refactor | `cpanel/panel/stock.php`, `cpanel/panel/dashboard.php` | Aplicado | **Conexión PDO duplicada (H-017).** Ambos archivos del panel construían su propio `DSN` y `new PDO(...)` en vez de reutilizar la fábrica `Database::pdo()`, con un conjunto de atributos ligeramente distinto (faltaba `ATTR_EMULATE_PREPARES => false`). Se sustituyen por `require Database.php` + `Database::pdo()`. | `php -l` limpio en ambos archivos. **No ejecutado contra MySQL real.** |
+| CAM-019 | 2026-10-13 | fix | `pos/index.html`, `pos/vite.config.js`, `pos/public/icons/{apple-touch-icon,icon-192,icon-512}.png` | Aplicado | **Sin icono para iOS (H-019).** El manifest solo declaraba `icon.svg`, y iOS **ignora** el SVG tanto en el manifest como en `apple-touch-icon`. Se rasteriza el propio `icon.svg` (canvas del navegador, mismo origen) a PNG 180×180, 192×192 y 512×512; se añaden al manifest (`any` y `maskable`) y se declara `<link rel="apple-touch-icon">` más las metas `apple-mobile-web-app-*` / `mobile-web-app-capable` para que la app instalada abra en standalone. | **Verificado:** cabeceras PNG de 180/192/512 px; análisis de píxeles del `apple-touch-icon` confirma 27 963 px en el marino exacto `rgb(29,45,68)`; `npm run build` OK (precache 7 → 13 entradas) y manifest generado con los 4 iconos. |
 
 ---
 
@@ -86,9 +88,9 @@ Cuando un hallazgo de la **sección 4** se corrija, se registra su `CAM-###` en 
 | H-013 | `pos/src/lib/impresora.js:125` | `conectarImpresora()` no está en ninguna pantalla: la impresora térmica nunca se conecta; siempre cae al `window.open`, que si el navegador lo bloquea → ticket solo en pantalla y sin aviso. |
 | H-015 | `README.md` | ~~Vacío~~ → cerrado en **CAM-014**. |
 | H-016 | `cpanel/panel/index.php:63` | La página de acceso anuncia los usuarios seed; `:37` filtra el mensaje de PDO y puede filtrar host/usuario de la BD. Sin límite de intentos de login. |
-| H-017 | `cpanel/panel/stock.php:5-10`, `dashboard.php:5-10` | Duplican la conexión PDO en vez de usar `Database::pdo()`. |
+| H-017 | `cpanel/panel/stock.php:5-10`, `dashboard.php:5-10` | ~~Duplican la conexión PDO en vez de usar `Database::pdo()`~~ → cerrado en **CAM-018**. |
 | H-018 | `pos/src/pages/Sync.jsx:55` | ~~Indicador online sin listeners~~ → cerrado en **CAM-010**. |
-| H-019 | `pos/vite.config.js:26` | Solo icono SVG en el manifest → sin `apple-touch-icon` para iOS. |
+| H-019 | `pos/vite.config.js:26` | ~~Solo icono SVG en el manifest → sin `apple-touch-icon` para iOS~~ → cerrado en **CAM-019**. |
 | H-020 | `pos/src/pages/Venta.jsx:151` | ~~Stock local puede bajar de cero~~ → cerrado en **CAM-009** (pendiente de prueba en UI). |
 | H-021 | proyecto | Sin tests, sin linter, sin CI. |
 | H-022 | `pos/src/pages/Venta.jsx:189` | ~~"Ir a Caja" no navegaba (usaba `location.hash` con navegación por `useState`)~~ → cerrado en **CAM-016**. |
@@ -109,6 +111,8 @@ Cuando un hallazgo de la **sección 4** se corrija, se registra su `CAM-###` en 
 | H-012 | Zona horaria de corte no fijada | **CAM-011** | 2026-10-13 |
 | H-014 | Sin `.gitignore` (riesgo de commitear `node_modules` o `config.php`) | **CAM-006** | 2026-10-13 |
 | H-015 | `README.md` vacío | **CAM-014** | 2026-10-13 |
+| H-017 | Panel duplicaba la conexión PDO | **CAM-018** | 2026-10-13 |
+| H-019 | Sin `apple-touch-icon` para iOS (solo SVG) | **CAM-019** | 2026-10-13 |
 | H-018 | Indicador online sin listeners `online`/`offline` | **CAM-010** | 2026-10-13 |
 | H-020 | Stock local puede bajar de cero (pendiente prueba UI) | **CAM-009** | 2026-10-13 |
 | H-022 | "Ir a Caja" no navegaba | **CAM-016** | 2026-10-13 |
@@ -175,6 +179,19 @@ Entorno: `pos/` con `npm run dev` en `http://localhost:5137/pos/`, Chrome, sin A
 
 > **Nota de verificación:** no hay servidor MySQL disponible en esta máquina (Docker Desktop instalado pero demonio apagado), por lo que la parte del servidor se verificó con las sentencias extraídas del propio `index.php` ejecutadas sobre SQLite. Queda pendiente de confirmar contra MySQL real.
 
+### Lote 5 · panel e iconos (H-017, H-019)
+
+| # | Prueba | Resultado |
+|---|---|---|
+| 35 | `php -l` sobre `stock.php` y `dashboard.php` tras usar `Database::pdo()` | ✅ sin errores de sintaxis |
+| 36 | Dimensiones de los PNG rasterizados | ✅ 180×180, 192×192, 512×512 |
+| 37 | Análisis de píxeles del `apple-touch-icon` | ✅ 27 963 px en el marino exacto `rgb(29,45,68)` + 2 818 px de figura blanca |
+| 38 | `manifest.webmanifest` generado | ✅ 4 iconos (`svg any`, `192 any`, `512 any`, `512 maskable`) |
+| 39 | `dist/index.html` generado | ✅ `apple-touch-icon` y metas `apple-mobile-web-app-*` presentes |
+| 40 | `npm run build` | ✅ precache 7 → 13 entradas (314.62 KiB) |
+
+> **Nota de verificación (H-017):** el cambio es un refactoring de una sola línea por archivo con comportamiento equivalente al anterior (de hecho corrige el que faltara `ATTR_EMULATE_PREPARES => false`), pero **no se ejecutó contra MySQL real** por la misma razón del lote 4.
+
 ---
 
 ## 6. Próximos pasos
@@ -185,6 +202,9 @@ Entorno: `pos/` con `npm run dev` en `http://localhost:5137/pos/`, Chrome, sin A
 4. ~~Atacar H-002 y H-003~~ → **hecho y verificado en vivo (CAM-007, CAM-008)**.
 5. ~~Nueva identidad visual~~ → **hecho y verificado (CAM-015)**.
 6. ~~Atacar H-011 (colisión multi-dispositivo)~~ → **hecho y verificado (CAM-017)**.
-7. Reintentar la prueba de UI de CAM-009 (tope de stock) y CAM-010 (indicador online) cuando el navegador vuelva a responder de forma estable.
-8. Verificar CAM-011, CAM-012 y CAM-017 contra MySQL real (Opción B), que es lo único que faltaría para cerrar del todo H-008, H-010, H-011 y H-012.
-9. Atacar H-007 (sync por venta), H-009 (login en PWA) y H-013 (impresora / popup bloqueado).
+7. ~~Atacar H-017 (PDO duplicado) e H-019 (icono iOS)~~ → **hecho (CAM-018, CAM-019)**.
+8. Atacar **H-007** (sync por venta: las ventas solo viajan al cerrar caja) — es el hallazgo de pérdida de datos más grande que queda.
+9. Atacar **H-009** (login real en la PWA) y **H-013** (impresora / popup bloqueado).
+10. Reintentar la prueba de UI de CAM-009 (tope de stock) y CAM-010 (indicador online) cuando el navegador vuelva a responder de forma estable.
+11. Verificar CAM-011, CAM-012, CAM-017 y CAM-018 contra MySQL real (Opción B).
+12. Atacar H-016 (endurecer el login del panel) y H-021 (tests, linter, CI).

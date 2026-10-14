@@ -4,12 +4,8 @@ date_default_timezone_set('America/Mexico_City');
 require __DIR__ . '/guard.php';
 require_admin(); // el panel de reportes es solo para el duenio (H-010)
 
-$config = require __DIR__ . '/../api/config.php';
-$dsn = sprintf('mysql:host=%s;dbname=%s;charset=utf8mb4', $config['db_host'], $config['db_name']);
-$pdo = new PDO($dsn, $config['db_user'], $config['db_pass'], [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-]);
+require __DIR__ . '/../api/src/Database.php';
+$pdo = Database::pdo(); // una sola fabrica de conexion (H-017)
 
 // Rango por defecto: hoy.
 $hoy = date('Y-m-d');
