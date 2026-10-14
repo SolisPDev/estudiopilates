@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { db, obtenerConfig, guardarConfig } from '../db/database.js'
+import { db, obtenerConfig, guardarConfig, sufijoDispositivo } from '../db/database.js'
 import { uuid } from '../api/sync.js'
 import { imprimirTicket } from '../lib/impresora.js'
 
@@ -107,11 +107,16 @@ export default function Venta({ caja, recargarCaja, irACaja }) {
     const fecha = new Date().toISOString()
     const contador = (parseInt((await obtenerConfig('ultimo_folio')) ?? '0', 10)) + 1
     await guardarConfig('ultimo_folio', String(contador))
+    // El folio lleva el sufijo del equipo: dos dispositivos que cobran el mismo
+    // dia no pueden chocar el consecutivo local (H-011).
+    const sufijo = await sufijoDispositivo()
 
     const venta = {
       id: ventaId,
       caja_id: caja.id,
-      folio: `V-${new Date().toISOString().slice(5, 10).replace('-', '')}${String(contador).padStart(4, '0')}`,
+      folio: `V-${new Date().toISOString().slice(5, 10).replace('-', '')}-${sufijo}-${String(
+        contador
+      ).padStart(4, '0')}`,
       cliente: cliente.trim() || null,
       fecha,
       subtotal,

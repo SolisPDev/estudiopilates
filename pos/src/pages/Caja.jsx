@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { db, obtenerConfig, guardarConfig } from '../db/database.js'
+import { db, obtenerConfig, guardarConfig, sufijoDispositivo } from '../db/database.js'
 import { uuid, enviarLote, marcarLote, obtenerToken, guardarToken } from '../api/sync.js'
 
 export default function Caja({ caja, recargarCaja }) {
@@ -35,7 +35,10 @@ export default function Caja({ caja, recargarCaja }) {
   async function abrirCaja() {
     const fondoNum = Number(fondo) || 0
     const fecha = new Date().toISOString()
-    const numero = `C-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`
+    // El sufijo del equipo evita que dos dispositivos generen el mismo
+    // numero de caja el mismo dia (H-011).
+    const sufijo = await sufijoDispositivo()
+    const numero = `C-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${sufijo}`
     await db.cajas.add({
       id: uuid(),
       numero,

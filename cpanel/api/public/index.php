@@ -96,8 +96,13 @@ if ($metodo === 'POST' && $ruta === '/cierres') {
     $pdo = Database::pdo();
     $pdo->beginTransaction();
 
+    // La caja se registra con INSERT IGNORE y nunca con ON DUPLICATE KEY UPDATE:
+    // ese upsert se activa ante CUALQUIER unique key (no solo la PK), de modo que
+    // un "numero" repetido por otro dispositivo habria reescrito su fila. Con
+    // INSERT IGNORE la colision simplemente no escribe y la deteccion posterior
+    // (ver $filasCaja) la reporta en vez de corromper datos (H-011).
     $upsertCaja = $pdo->prepare(
-        "INSERT INTO cajas
+        "INSERT IGNORE INTO cajas
             (id, numero, usuario_id_apertura, usuario_id_cierre, fondo_inicial,
              fecha_apertura, fecha_cierre, total_ventas, total_ingresos, total_efectivo,
              total_transferencia, total_tarjeta, total_egresos, efectivo_esperado,
@@ -105,20 +110,7 @@ if ($metodo === 'POST' && $ruta === '/cierres') {
          VALUES
             (:id, :numero, :u_apertura, :u_cierre, :fondo, :f_apertura, :f_cierre,
              :t_ventas, :t_ingresos, :t_efectivo, :t_transf, :t_tarjeta, :t_egresos,
-             :e_esperado, :e_contado, :diferencia, 'cerrada')
-         ON DUPLICATE KEY UPDATE
-            fecha_cierre = VALUES(fecha_cierre),
-            usuario_id_cierre = VALUES(usuario_id_cierre),
-            total_ventas = VALUES(total_ventas),
-            total_ingresos = VALUES(total_ingresos),
-            total_efectivo = VALUES(total_efectivo),
-            total_transferencia = VALUES(total_transferencia),
-            total_tarjeta = VALUES(total_tarjeta),
-            total_egresos = VALUES(total_egresos),
-            efectivo_esperado = VALUES(efectivo_esperado),
-            efectivo_contado = VALUES(efectivo_contado),
-            diferencia = VALUES(diferencia),
-            estado = 'cerrada'"
+             :e_esperado, :e_contado, :diferencia, 'cerrada')"
     );
 
     $cajaId = (string) $caja['id'];
@@ -178,6 +170,9 @@ if ($metodo === 'POST' && $ruta === '/cierres') {
 
     $buscarPorId = $pdo->prepare('SELECT id FROM productos WHERE id = :id LIMIT 1');
     $buscarPorCodigo = $pdo->prepare('SELECT id FROM productos WHERE codigo = :codigo LIMIT 1');
+    // Permite distinguir una venta ya sincronizada de una descartada por
+    // colision de folio (INSERT IGNORE las oculta en silencio) (H-011).
+    $ventaExiste = $pdo->prepare('SELECT id FROM ventas WHERE id = :id LIMIT 1');
 
     // Acepta tanto el id numerico como el codigo: los ids locales de la PWA
     // pueden ser textuales ('art-toalla') y la columna es INT UNSIGNED (H-002).
@@ -200,11 +195,16 @@ if ($metodo === 'POST' && $ruta === '/cierres') {
     };
 
     $nuevos = ['caja' => true, 'ventas' => 0, 'egresos' => 0, 'movimientos' => 0, 'sin_producto' => 0];
+    $ventasPerdidas = [];
 
     foreach ($ventas as $v) {
+        $ventaId = (string) ($v['id'] ?? '');
+        $ventaExiste->execute([':id' => $ventaId]);
+        $yaEnviada = (bool) $ventaExiste->fetch();
+
         $okVenta = $insertVenta->execute([
-            ':id' => (string) ($v['id'] ?? ''),
-            ':folio' => (string) ($v['folio'] ?? ('V-' . substr((string) ($v['id'] ?? ''), 0, 8))),
+            ':id' => $ventaId,
+            ':folio' => (string) ($v['folio'] ?? ('V-' . substr($ventaId, 0, 8))),
             ':caja_id' => $cajaId,
             ':usuario_id' => $v['usuario_id'] ?? null,
             ':cliente' => $v['cliente'] ?? null,
@@ -215,6 +215,10 @@ if ($metodo === 'POST' && $ruta === '/cierres') {
         ]);
         if ($okVenta && $insertVenta->rowCount() > 0) {
             $nuevos['ventas']++;
+        } elseif (!$yaEnviada && $ventaId !== '') {
+            // No existia antes y tampoco se escribio: su folio pertenece a otra
+            // venta. Se reporta en vez de descartarla en silencio (H-011).
+            $ventasPerdidas[] = ['id' => $ventaId, 'folio' => $v['folio'] ?? null];
         }
         foreach (($v['items'] ?? []) as $i) {
             $insertItem->execute([
@@ -324,6 +328,24 @@ if ($metodo === 'POST' && $ruta === '/cierres') {
         ':diferencia' => $diferencia,
         ':id' => $cajaId,
     ]);
+    // Si ninguna fila coincide con el id, la caja nunca se registro: o bien el
+    // lote llego sin ella o bien su "numero" choco con el de otro dispositivo.
+    // Se reporta en lugar de responder ok silenciosamente (H-011).
+    $filasCaja = $updateTotales->rowCount();
+    if ($filasCaja === 0) {
+        $existe = $pdo->prepare('SELECT COUNT(*) AS n FROM cajas WHERE id = :id');
+        $existe->execute([':id' => $cajaId]);
+        if ((int) $existe->fetch()['n'] === 0) {
+            $pdo->rollBack();
+            resp_json([
+                'ok' => false,
+                'error' => 'colision_caja',
+                'detalle' => 'La caja no quedo registrada. Su numero "' . ($caja['numero'] ?? $cajaId)
+                    . '" puede pertenecer a otro dispositivo.',
+                'caja_id' => $cajaId,
+            ], 409);
+        }
+    }
 
     $insertCierre = $pdo->prepare(
         "INSERT IGNORE INTO cierres (id, caja_id, usuario_id_cierre, fecha_cierre, resumen)
@@ -361,6 +383,9 @@ if ($metodo === 'POST' && $ruta === '/cierres') {
             'diferencia' => $diferencia,
         ],
         'nuevos' => $nuevos,
+        // Ventas que el servidor no pudo registrar (folio ajeno). La PWA debe
+        // reenviarlas o escalarlas; nunca quedar ocultas (H-011).
+        'ventas_perdidas' => $ventasPerdidas,
     ]);
 }
 

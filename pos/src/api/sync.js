@@ -1,4 +1,7 @@
-import { db, obtenerConfig, guardarConfig } from '../db/database.js'
+import { db, obtenerConfig, guardarConfig, uuid, sufijoDispositivo } from '../db/database.js'
+
+// Reexportado para no romper los imports existentes (Caja.jsx, Venta.jsx).
+export { uuid }
 
 // La PWA y la API viven en el mismo hosting cPanel:
 //   PWA   -> /pos/
@@ -7,15 +10,6 @@ import { db, obtenerConfig, guardarConfig } from '../db/database.js'
 // apuntar a otro host con VITE_API_BASE.
 export const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
 const TOKEN_KEY = 'api_token'
-
-export function uuid() {
-  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0
-    const v = c === 'x' ? r : (r & 0x3) | 0x8
-    return v.toString(16)
-  })
-}
 
 export async function obtenerToken() {
   return (await obtenerConfig(TOKEN_KEY)) ?? 'cambiar-token'
@@ -194,9 +188,17 @@ export async function enviarLote(caja) {
 
   const json = await res.json()
 
+  // El servidor lista las ventas que no pudo registrar por colision de folio.
+  // Esas NO se marcan como enviadas: quedan pendientes para que la PWA las
+  // reintente o las escale, en vez de darlas por buenas y perderlas (H-011).
+  const perdidas = new Set(
+    (json?.ventas_perdidas ?? []).map((p) => (typeof p === 'string' ? p : p.id)).filter(Boolean)
+  )
+
   await db.transaction('rw', db.ventas, db.egresos, db.movimientos, db.lotes, async () => {
     const ventas = await db.ventas.where('caja_id').equals(caja.id).toArray()
     for (const v of ventas) {
+      if (perdidas.has(v.id)) continue
       await db.ventas.put({ ...v, enviada: 1 })
     }
     const egresos = await db.egresos.where('caja_id').equals(caja.id).toArray()

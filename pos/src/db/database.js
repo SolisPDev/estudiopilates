@@ -18,6 +18,15 @@ db.version(1).stores({
   lotes: 'id, caja_id, fecha, estado, error, reintentos'
 })
 
+export function uuid() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+
 export async function obtenerConfig(key) {
   const fila = await db.config.get(key)
   return fila ? fila.valor : null
@@ -25,6 +34,29 @@ export async function obtenerConfig(key) {
 
 export async function guardarConfig(key, valor) {
   await db.config.put({ key, valor })
+}
+
+// Identificador propio de cada equipo (receptor/tablet). Se genera una sola vez
+// y se conserva: distingue el numero de caja y el folio de las ventas entre
+// varios dispositivos que operan el mismo dia (H-011).
+const CLAVE_DISPOSITIVO = 'dispositivo_id'
+let cacheDispositivo = null
+
+export async function dispositivoId() {
+  if (cacheDispositivo) return cacheDispositivo
+  let id = await obtenerConfig(CLAVE_DISPOSITIVO)
+  if (!id) {
+    id = uuid()
+    await guardarConfig(CLAVE_DISPOSITIVO, id)
+  }
+  cacheDispositivo = id
+  return id
+}
+
+// Sufijo corto de 4 caracteres, en mayusculas, usado en numero y folio.
+export async function sufijoDispositivo() {
+  const id = await dispositivoId()
+  return id.replace(/-/g, '').slice(0, 4).toUpperCase()
 }
 
 export async function semillaInicial() {

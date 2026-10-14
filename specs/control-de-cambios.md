@@ -55,6 +55,7 @@ Cuando un hallazgo de la **sección 4** se corrija, se registra su `CAM-###` en 
 | CAM-014 | 2026-10-13 | docs | `README.md` | Aplicado | **README vacío (H-015).** Documenta arquitectura, ejecución local, esquema de BD, endpoints de la API, panel, despliegue en cPanel y pendientes. | Revisado en el repo. |
 | CAM-015 | 2026-10-13 | feat | `pos/src/styles.css`, `pos/src/App.jsx`, `pos/src/pages/{Venta,Caja,Inventario,Sync}.jsx`, `pos/index.html`, `pos/vite.config.js`, `pos/public/icons/icon.svg` | Aplicado | **Nueva identidad visual.** Se reemplaza la paleta genérica violeta/slate de Tailwind por tokens semánticos propios (`@theme`) tomados de **eastriverpilates.com**: marino `#1d2d44` (marca), marfil `#fffef5` (fondo), crema `#f6f5e9`, arena `#a59f8f`, pizarra `#555f61`, tinta `#333333`; estados apagados (`exito`/`aviso`/`error`) que no pelean con la paleta. Titulares en serif, botones principales en píldora con mayúsculas y `tracking-wide`. También se actualizan `theme_color`, `background_color` del manifest y el icono SVG. | **Verificado en vivo:** `getComputedStyle` confirma header `rgb(29,45,68)`, fondo `rgb(255,254,245)`, pestaña activa marino; capturas de Venta, Caja y Apertura. `npm run build` OK (PWA 282.75 KiB). |
 | CAM-016 | 2026-10-13 | fix | `pos/src/pages/Venta.jsx`, `pos/src/App.jsx` | Aplicado | **Botón "Ir a Caja" no navegaba.** Fijaba `window.location.hash = ''`, pero la navegación por pestañas usa `useState` en `App.jsx`, no hash: el clic solo refrescaba la caja y la vista no cambiaba. Se pasa `irACaja={() => setTab('caja')}` a `Venta` y se usa como `onClick`. | **Verificado en vivo:** con la caja cerrada, el clic en "IR A CAJA" lleva a la pestaña Caja ("Apertura de caja"). |
+| CAM-017 | 2026-10-13 | fix | `pos/src/db/database.js`, `pos/src/api/sync.js`, `pos/src/pages/Caja.jsx`, `pos/src/pages/Venta.jsx`, `cpanel/api/public/index.php` | Aplicado | **Colisión multi-dispositivo (H-011).** Cada equipo persiste un `dispositivo_id` (UUID) y usa su sufijo de 4 caracteres en los dos identificadores que no distinguían equipo: `cajas.numero` → `C-AAAAMMDD-XXXX` y `ventas.folio` → `V-MMDD-XXXX-NNNN`. En el servidor se sustituye el `INSERT ... ON DUPLICATE KEY UPDATE` de `cajas` (que se activa ante **cualquier** unique key y por tanto reescribía la caja del otro equipo) por `INSERT IGNORE` + detección vía `rowCount()` del `UPDATE ... WHERE id`, devolviendo `409 colision_caja`. Además `ventas` distingue ahora "ya sincronizada" de "descartada por folio ajeno" y responde `ventas_perdidas`, campo que la PWA usa para **no** marcar esas ventas como `enviada`. `uuid()` se unificó en `database.js` y se reexporta desde `sync.js`. | **Verificado en vivo (PWA):** la BD local tenía 3 cajas en `C-20261013`; la nueva quedó `C-20261013-973C` y la venta `V-1013-973C-0003`. **Verificado (servidor):** `php -l` limpio y prueba que ejecuta las sentencias SQL reales extraídas de `index.php` sobre SQLite con `UNIQUE(numero)`: 8/8 comprobaciones (colisión detectada, caja ajena **no** reescrita, reenvío idempotente). **No ejecutado contra MySQL real** (sin servidor disponible). |
 
 ---
 
@@ -75,7 +76,7 @@ Cuando un hallazgo de la **sección 4** se corrija, se registra su `CAM-###` en 
 | H-008 | `cpanel/api/public/index.php` + `pos/vite.config.js` | ~~La ruta `/api` no resuelve sin un `.htaccess` raíz~~ → cerrado en **CAM-011** + **CAM-013**. | — |
 | H-009 | `pos/src/api/sync.js:29` · `pos/src/App.jsx:30` | **Sin usuario real en el POS.** No hay login; `usuario_id` siempre es `1` y `usuario_nombre` nunca se escribe. Toda venta queda atribuida al admin. | Revisión de código. |
 | H-010 | `cpanel/panel/dashboard.php:3`, `stock.php:3` | ~~`require_admin()` nunca se llama~~ → cerrado en **CAM-012**. | — |
-| H-011 | `cpanel/api/public/index.php:94` + `db/schema.sql:72` | **Colisión con 2 dispositivos:** `cajas.numero = C-AAAAAMMDD` es UNIQUE y el upsert sobrescribiría la caja del otro equipo; el folio (`Venta.jsx:105`) colisionaría y la venta se descartaría. | Revisión de código. |
+| H-011 | `cpanel/api/public/index.php:94` + `db/schema.sql:72` | ~~Colisión con 2 dispositivos~~ → cerrado en **CAM-017**. | — |
 | H-012 | `cpanel/api/public/index.php:34` | ~~Zona horaria~~ → cerrado en **CAM-011**. | — |
 
 ### 🟡 Medios
@@ -104,6 +105,7 @@ Cuando un hallazgo de la **sección 4** se corrija, se registra su `CAM-###` en 
 | H-006 | Modal de recibo nunca aparecía | **CAM-005** | 2026-10-13 |
 | H-008 | `/api` no resolvía en cPanel sin `.htaccess` raíz | **CAM-011** + **CAM-013** | 2026-10-13 |
 | H-010 | Panel web sin autorización (`require_admin()` sin llamar) | **CAM-012** | 2026-10-13 |
+| H-011 | Colisión multi-dispositivo en `cajas.numero` y `ventas.folio` | **CAM-017** | 2026-10-13 |
 | H-012 | Zona horaria de corte no fijada | **CAM-011** | 2026-10-13 |
 | H-014 | Sin `.gitignore` (riesgo de commitear `node_modules` o `config.php`) | **CAM-006** | 2026-10-13 |
 | H-015 | `README.md` vacío | **CAM-014** | 2026-10-13 |
@@ -160,6 +162,19 @@ Entorno: `pos/` con `npm run dev` en `http://localhost:5137/pos/`, Chrome, sin A
 
 > **Observaciones:** (1) al cerrar la pestaña del navegador se borró IndexedDB y se perdieron los datos de la primera tanda de pruebas: es la evidencia en vivo de **H-007**. (2) Durante el lote 2 la ventana de escritorio del navegador dejó de estar visible, lo que provocó interacciones parciales de la automatización (`click`/`fill` incompletos). Por eso CAM-009 y CAM-010 quedan marcados como aplicados pero **no probados en UI**, y la prueba 22 no se concluyó.
 
+### Lote 4 · colisión multi-dispositivo (H-011)
+
+| # | Prueba | Resultado |
+|---|---|---|
+| 29 | Estado previo de la BD local | ✅ evidencia del bug: **3 cajas con el mismo `numero` `C-20261013`** |
+| 30 | `numero` de caja con código nuevo | ✅ **`C-20261013-973C`** (sufijo del equipo `973C`) |
+| 31 | `folio` de venta con código nuevo | ✅ **`V-1013-973C-0003`** (antes `V-10130003`) |
+| 32 | `php -l` sobre `index.php` | ✅ sin errores de sintaxis |
+| 33 | Prueba que ejecuta las sentencias SQL **reales** de `index.php` sobre SQLite con `UNIQUE(numero)` | ✅ **8/8**: colisión detectada (`rowCount=0`), caja ajena **no** reescrita, reenvío idempotente sin duplicar |
+| 34 | `npm run build` | ✅ PWA generada, service worker precacheado |
+
+> **Nota de verificación:** no hay servidor MySQL disponible en esta máquina (Docker Desktop instalado pero demonio apagado), por lo que la parte del servidor se verificó con las sentencias extraídas del propio `index.php` ejecutadas sobre SQLite. Queda pendiente de confirmar contra MySQL real.
+
 ---
 
 ## 6. Próximos pasos
@@ -169,6 +184,7 @@ Entorno: `pos/` con `npm run dev` en `http://localhost:5137/pos/`, Chrome, sin A
 3. ~~Documentar instalación/despliegue en `README.md` (H-015) y `.htaccess` raíz para `/api` (H-008)~~ → **hecho (CAM-013, CAM-014)**.
 4. ~~Atacar H-002 y H-003~~ → **hecho y verificado en vivo (CAM-007, CAM-008)**.
 5. ~~Nueva identidad visual~~ → **hecho y verificado (CAM-015)**.
-6. Reintentar la prueba de UI de CAM-009 (tope de stock) y CAM-010 (indicador online) cuando el navegador vuelva a responder de forma estable.
-7. Verificar CAM-011 y CAM-012 contra MySQL real (Opción B), que es lo único que faltaría para cerrar del todo H-008, H-010 y H-012.
-8. Atacar H-011 (colisión multi-dispositivo), H-009 (login en PWA) y H-013 (impresora / popup bloqueado).
+6. ~~Atacar H-011 (colisión multi-dispositivo)~~ → **hecho y verificado (CAM-017)**.
+7. Reintentar la prueba de UI de CAM-009 (tope de stock) y CAM-010 (indicador online) cuando el navegador vuelva a responder de forma estable.
+8. Verificar CAM-011, CAM-012 y CAM-017 contra MySQL real (Opción B), que es lo único que faltaría para cerrar del todo H-008, H-010, H-011 y H-012.
+9. Atacar H-007 (sync por venta), H-009 (login en PWA) y H-013 (impresora / popup bloqueado).
